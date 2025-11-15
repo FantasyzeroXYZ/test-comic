@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>我的漫画阅读器</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>漫画阅读器</h1>
+        <input type="file" id="comic-file" accept=".zip,.cbz" />
+        <input type="file" id="mokuro-file" accept=".mokuro" />
+    </header>
+    
+    <main>
+        <div id="comic-viewer"></div>
+        <div id="json-tooltip"></div>
+    </main>
+
+        <!-- 底部弹出面板 -->
+    <div class="panel-overlay" id="panel-overlay"></div>
+    <div class="dictionary-panel" id="dictionary-panel">
+        <div class="panel-header">
+            <div class="panel-title" id="panel-word-title">词典查询</div>
+            <button class="close-panel" id="close-panel">×</button>
+        </div>
+        
+        <!-- 搜索和Anki按钮 -->
+        <div class="panel-search-anki-container">
+            <div class="panel-search-container">
+                <input type="text" class="panel-search-input" id="panel-search-input" placeholder="输入要查询的单词...">
+                <button class="panel-search-btn" id="panel-search-btn">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button class="append-word-btn" id="append-word-btn" title="追加词汇">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="panel-anki-btn" id="panel-add-to-anki-btn" title="添加到Anki">
+                    <img src="./assets/icons8-anki-24.png" alt="Anki" class="anki-icon">
+                </button>
+            </div>
+        </div>
+        
+        <div class="original-sentence" id="original-sentence">
+            原句将显示在这里...
+        </div>
+        
+        <!-- 标签页导航 -->
+        <div class="dictionary-tabs">
+            <button class="tab-button active" data-tab="dictionary-tab">词典释义</button>
+            <button class="tab-button" data-tab="web-tab">网页查询</button>
+            <button class="tab-button" data-tab="tampermonkey-tab" id="tampermonkey-btn">油猴操作</button>
+            <button class="tab-button" data-tab="custom-tab">自定义释义</button>
+        </div>
+
+        <!-- 标签页内容 -->
+        <div class="tab-content">
+            <!-- 词典 -->
+            <div id="dictionary-tab" class="tab-pane active">
+                <div class="dictionary-result" id="panel-dictionary-result">
+                    查询结果将显示在这里...
+                </div>
+            </div>
+
+            <!-- 网页 -->
+            <div id="web-tab" class="tab-pane">
+                <div class="dictionary-result" id="panel-web-result">
+                    <iframe id="web-search-frame" style="width: 100%; height: 300px; border: none;" src="about:blank"></iframe>
+                </div>
+            </div>
+
+            <!-- 油猴结果 -->
+            <div id="tampermonkey-tab" class="tab-pane">
+                <div class="dictionary-result" id="panel-tampermonkey-result">
+                    <div class="loading">等待脚本返回结果...如果没有显示，请手动点击搜索按键</div>
+                    <div class="experiment-info">
+                        还在测试，该功能可以通过油猴脚本添加自定义词典，如需使用请先安装脚本：
+                        <a href="https://github.com/FantasyzeroXYZ/VAMplayer/releases/download/userscripts/userscripts.zip" target="_blank">点击下载脚本压缩包</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 自定义 -->
+            <div id="custom-tab" class="tab-pane">
+                <div class="custom-definition">
+                    <textarea id="panel-custom-definition-input"
+                        placeholder="如果查词没有返回内容或者想自定义释义内容，请在此输入..."></textarea>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 引入处理ZIP的库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- 最后加载主应用 -->
+    <script src="js/script.js"></script>
+</body>
+</html>
