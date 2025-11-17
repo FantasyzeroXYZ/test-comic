@@ -17,6 +17,18 @@ let currentImages = [];
 let zoomLevel = 1.0;
 let currentMokuroData = null;
 
+// Anki设置相关变量
+let ankiSettings = {
+    ip: '127.0.0.1',
+    port: '8765',
+    deck: '默认牌组',
+    noteType: '基本',
+    sentenceField: '句子',
+    wordField: '单词',
+    meaningField: '释义',
+    imageField: '图片'
+};
+
 // 拖拽和缩放相关变量
 let isPanning = false;
 let startPanX, startPanY;
@@ -38,6 +50,16 @@ class ZipProcessor {
         this.zip = new JSZip();
         this.resizeTimeout = null;
         console.log('ZipProcessor初始化完成');
+    }
+
+    /**
+     * 获取当前图片数据
+     */
+    getCurrentImageData() {
+        if (currentImages && currentImages[currentPageIndex]) {
+            return currentImages[currentPageIndex];
+        }
+        return null;
     }
 
     /**
@@ -878,84 +900,132 @@ class DictionaryPanel {
     }
 
     initElements() {
-        // 获取DOM元素
-        dictionaryPanel = document.getElementById('dictionary-panel');
-        panelOverlay = document.getElementById('panel-overlay');
-        panelDictionaryResult = document.getElementById('panel-dictionary-result');
-        panelSearchInput = document.getElementById('panel-search-input');
-        panelSearchBtn = document.getElementById('panel-search-btn');
-        appendWordBtn = document.getElementById('append-word-btn');
-        originalSentence = document.getElementById('original-sentence');
-        webSearchFrame = document.getElementById('web-search-frame');
-        closePanelBtn = document.getElementById('close-panel');
-        tabButtons = document.querySelectorAll('.tab-button');
+        // 获取词典面板元素 - 使用 this. 前缀
+        this.dictionaryPanel = document.getElementById('dictionary-panel');
+        this.panelOverlay = document.getElementById('panel-overlay');
+        this.panelDictionaryResult = document.getElementById('panel-dictionary-result');
+        this.panelSearchInput = document.getElementById('panel-search-input');
+        this.panelSearchBtn = document.getElementById('panel-search-btn');
+        this.appendWordBtn = document.getElementById('append-word-btn');
+        this.originalSentence = document.getElementById('original-sentence');
+        this.webSearchFrame = document.getElementById('web-search-frame');
+        this.closePanelBtn = document.getElementById('close-panel');
+        this.tabButtons = document.querySelectorAll('.tab-button');
+        
+        // 新增：Anki制卡按钮
+        this.panelAnkiBtn = document.getElementById('panel-add-to-anki-btn');
+        
+        console.log('词典面板元素初始化完成', {
+            dictionaryPanel: !!this.dictionaryPanel,
+            panelOverlay: !!this.panelOverlay,
+            panelSearchInput: !!this.panelSearchInput,
+            panelSearchBtn: !!this.panelSearchBtn,
+            closePanelBtn: !!this.closePanelBtn
+        });
     }
 
     initEventListeners() {
+        // 安全检查：确保元素存在再添加事件监听器
+        if (!this.closePanelBtn || !this.panelOverlay) {
+            console.error('词典面板关键元素未找到:', {
+                closePanelBtn: !!this.closePanelBtn,
+                panelOverlay: !!this.panelOverlay
+            });
+            return;
+        }
+
         // 关闭面板
-        closePanelBtn.addEventListener('click', () => {
+        this.closePanelBtn.addEventListener('click', () => {
             this.closeDictionaryPanel();
         });
-        panelOverlay.addEventListener('click', () => {
+        this.panelOverlay.addEventListener('click', () => {
             this.closeDictionaryPanel();
         });
 
         // 搜索功能
-        panelSearchBtn.addEventListener('click', () => {
-            this.handleSearch();
-        });
-        panelSearchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+        if (this.panelSearchBtn && this.panelSearchInput) {
+            this.panelSearchBtn.addEventListener('click', () => {
                 this.handleSearch();
-            }
-        });
+            });
+            this.panelSearchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.handleSearch();
+                }
+            });
+        }
 
         // 标签页切换
-        tabButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                this.switchTab(e.target.getAttribute('data-tab'));
+        if (this.tabButtons && this.tabButtons.length > 0) {
+            this.tabButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    this.switchTab(e.target.getAttribute('data-tab'));
+                });
             });
-        });
+        }
 
         // 追加词汇
-        appendWordBtn.addEventListener('click', () => {
-            this.handleAppendWord();
-        });
+        if (this.appendWordBtn) {
+            this.appendWordBtn.addEventListener('click', () => {
+                this.handleAppendWord();
+            });
+        }
+
+        // 添加到Anki按钮
+        if (this.panelAnkiBtn) {
+            this.panelAnkiBtn.addEventListener('click', () => {
+                this.addCurrentWordToAnki();
+            });
+            console.log('Anki制卡按钮监听器已添加');
+        } else {
+            console.error('未找到Anki制卡按钮');
+        }
+
+        console.log('词典面板事件监听器初始化完成');
     }
 
     // 底部面板功能
     openDictionaryPanel() {
-        dictionaryPanel.classList.add('active');
-        panelOverlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
+        if (this.dictionaryPanel && this.panelOverlay) {
+            this.dictionaryPanel.classList.add('active');
+            this.panelOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
     }
 
     // 关闭词典面板
     closeDictionaryPanel() {
-        dictionaryPanel.classList.remove('active');
-        panelOverlay.classList.remove('active');
-        document.body.style.overflow = '';
+        if (this.dictionaryPanel && this.panelOverlay) {
+            this.dictionaryPanel.classList.remove('active');
+            this.panelOverlay.classList.remove('active');
+            document.body.style.overflow = '';
 
-        // 重置追加词汇状态
-        this.resetAppendedWords();
+            // 重置追加词汇状态
+            this.resetAppendedWords();
+        }
     }
 
     // 在面板中查询英语单词
     async searchWordInPanel(word) {
         if (!word.trim()) {
-            panelDictionaryResult.innerHTML = '<div class="error">请输入要查询的单词</div>';
+            if (this.panelDictionaryResult) {
+                this.panelDictionaryResult.innerHTML = '<div class="error">请输入要查询的单词</div>';
+            }
             return;
         }
         
         this.openDictionaryPanel();
-        panelDictionaryResult.innerHTML = '<div class="loading">查询中...</div>';
-        panelSearchInput.value = word;
+        if (this.panelDictionaryResult) {
+            this.panelDictionaryResult.innerHTML = '<div class="loading">查询中...</div>';
+        }
+        if (this.panelSearchInput) {
+            this.panelSearchInput.value = word;
+        }
         
-        if (activeTab === 'web-tab') {
+        if (this.activeTab === 'web-tab') {
             this.loadWebSearch(word);
         }
         // dictionary-tab 时自动查询
-        else if (activeTab === 'dictionary-tab')  {
+        else if (this.activeTab === 'dictionary-tab')  {
             try {
                 const apiUrl = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
                 const response = await fetch(apiUrl);
@@ -971,7 +1041,9 @@ class DictionaryPanel {
                 const data = await response.json();
                 this.displayWordDataInPanel(data);
             } catch (error) {
-                panelDictionaryResult.innerHTML = `<div class="error">${error.message}</div>`;
+                if (this.panelDictionaryResult) {
+                    this.panelDictionaryResult.innerHTML = `<div class="error">${error.message}</div>`;
+                }
                 console.error('查询错误:', error);
             }
         }
@@ -979,8 +1051,10 @@ class DictionaryPanel {
 
     // 显示单词数据
     displayWordDataInPanel(wordData) {
+        if (!this.panelDictionaryResult) return;
+        
         if (!wordData || !Array.isArray(wordData) || wordData.length === 0) {
-            panelDictionaryResult.innerHTML = '<div class="error">未找到单词信息</div>';
+            this.panelDictionaryResult.innerHTML = '<div class="error">未找到单词信息</div>';
             return;
         }
         
@@ -1025,13 +1099,15 @@ class DictionaryPanel {
             });
         }
         
-        panelDictionaryResult.innerHTML = html;
+        this.panelDictionaryResult.innerHTML = html;
     }
 
     // 更新原句显示
     updateOriginalSentence(sentence, currentWord, currentLanguageMode = 'english') {
+        if (!this.originalSentence) return;
+        
         if (currentLanguageMode === 'japanese') {
-            originalSentence.innerHTML = `<span>${sentence}</span>`;
+            this.originalSentence.innerHTML = `<span>${sentence}</span>`;
         } else {
             // 英语及其他空格分词语言
             let clickableSentence = '';
@@ -1059,14 +1135,14 @@ class DictionaryPanel {
                 }
             });
 
-            originalSentence.innerHTML = clickableSentence;
+            this.originalSentence.innerHTML = clickableSentence;
         }
 
         currentOriginalSentence = sentence;
 
         // 重新绑定点击事件
-        originalSentence.removeEventListener('click', this.handleSentenceWordClick);
-        originalSentence.addEventListener('click', this.handleSentenceWordClick);
+        this.originalSentence.removeEventListener('click', this.handleSentenceWordClick);
+        this.originalSentence.addEventListener('click', this.handleSentenceWordClick);
     }
 
     // 处理字幕进行的单词点击
@@ -1083,7 +1159,7 @@ class DictionaryPanel {
         }
 
         // 移除其他高亮
-        originalSentence.querySelectorAll('.sentence-word').forEach(s => {
+        this.originalSentence.querySelectorAll('.sentence-word').forEach(s => {
             s.classList.remove('highlight');
         });
 
@@ -1093,7 +1169,9 @@ class DictionaryPanel {
         // 重置状态并设置新的点击单词
         appendedWords = [word];
         currentWordIndex = index;
-        panelSearchInput.value = word;
+        if (this.panelSearchInput) {
+            this.panelSearchInput.value = word;
+        }
 
         // 执行搜索
         this.searchWordInPanel(word);
@@ -1103,16 +1181,22 @@ class DictionaryPanel {
     resetAppendedWords() {
         currentWordIndex = -1;
         appendedWords = [];
-        panelSearchInput.value = '';
+        if (this.panelSearchInput) {
+            this.panelSearchInput.value = '';
+        }
         
-        originalSentence.querySelectorAll('.sentence-word').forEach(span => {
-            span.classList.remove('highlight');
-        });
+        if (this.originalSentence) {
+            this.originalSentence.querySelectorAll('.sentence-word').forEach(span => {
+                span.classList.remove('highlight');
+            });
+        }
     }
 
     // 追加词汇功能
     handleAppendWord() {
-        const sentenceSpans = originalSentence.querySelectorAll('.sentence-word');
+        if (!this.originalSentence) return;
+        
+        const sentenceSpans = this.originalSentence.querySelectorAll('.sentence-word');
         if (!sentenceSpans.length) {
             console.log('没有可用的句子单词');
             return;
@@ -1137,15 +1221,17 @@ class DictionaryPanel {
         const word = currentSpan.getAttribute('data-word');
 
         // 更新搜索输入框
-        if (currentLanguageMode === 'english' && appendedWords.length > 0) {
-            panelSearchInput.value += ' ' + word;
-        } else {
-            panelSearchInput.value += word;
+        if (this.panelSearchInput) {
+            if (currentLanguageMode === 'english' && appendedWords.length > 0) {
+                this.panelSearchInput.value += ' ' + word;
+            } else {
+                this.panelSearchInput.value += word;
+            }
         }
 
         // 剪贴板功能
         if (clipboardEnabled) {
-            this.copyWordToClipboard(panelSearchInput.value);
+            this.copyWordToClipboard(this.panelSearchInput.value);
         }
         
         appendedWords.push(word);
@@ -1158,12 +1244,16 @@ class DictionaryPanel {
         });
 
         // 执行搜索
-        this.searchWordInPanel(panelSearchInput.value);
+        if (this.panelSearchInput) {
+            this.searchWordInPanel(this.panelSearchInput.value);
+        }
     }
 
     // 搜索处理
     handleSearch() {
-        const word = panelSearchInput.value.trim();
+        if (!this.panelSearchInput) return;
+        
+        const word = this.panelSearchInput.value.trim();
         if (!word) {
             this.showNotification('请输入要查询的单词');
             return;
@@ -1174,23 +1264,25 @@ class DictionaryPanel {
 
     // 加载网页查询
     loadWebSearch(word) {
-        if (!word) return;
+        if (!word || !this.webSearchFrame) return;
         
         const url = currentLanguageMode === 'japanese' ? 
             `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=ja` :
             `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=en`;
-        webSearchFrame.src = url;
+        this.webSearchFrame.src = url;
     }
 
     // 标签页切换
     switchTab(tabName) {
         // 更新活动标签
-        activeTab = tabName;
+        this.activeTab = tabName;
         
         // 更新按钮状态
-        tabButtons.forEach(button => {
-            button.classList.toggle('active', button.getAttribute('data-tab') === tabName);
-        });
+        if (this.tabButtons) {
+            this.tabButtons.forEach(button => {
+                button.classList.toggle('active', button.getAttribute('data-tab') === tabName);
+            });
+        }
         
         // 更新内容显示
         document.querySelectorAll('.tab-pane').forEach(pane => {
@@ -1198,8 +1290,8 @@ class DictionaryPanel {
         });
         
         // 如果切换到网页标签，加载搜索
-        if (tabName === 'web-tab' && panelSearchInput.value.trim()) {
-            this.loadWebSearch(panelSearchInput.value.trim());
+        if (tabName === 'web-tab' && this.panelSearchInput && this.panelSearchInput.value.trim()) {
+            this.loadWebSearch(this.panelSearchInput.value.trim());
         }
     }
 
@@ -1240,6 +1332,825 @@ class DictionaryPanel {
             }
         }, 3000);
     }
+
+    /**
+     * 添加当前单词到Anki（完整版本）
+     */
+    async addCurrentWordToAnki() {
+        try {
+            console.log('开始添加到Anki流程...');
+            
+            const word = this.panelSearchInput?.value?.trim();
+            const sentence = this.originalSentence?.textContent?.trim();
+            
+            if (!word) {
+                this.showNotification('请先查询一个单词', 'error');
+                return;
+            }
+            
+            // 检查Anki设置是否可用
+            if (!window.comicReaderApp || !window.comicReaderApp.ankiSettings) {
+                console.error('Anki设置未初始化');
+                this.showNotification('Anki设置未初始化，请检查侧边栏设置', 'error');
+                return;
+            }
+            
+            console.log('Anki设置可用，开始制卡...', { word, sentence });
+            
+            // 显示加载状态
+            const originalHTML = this.panelAnkiBtn.innerHTML;
+            this.panelAnkiBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中...';
+            this.panelAnkiBtn.disabled = true;
+            
+            // 获取释义
+            const definition = this.getCurrentDefinition();
+            console.log('获取到的释义:', definition);
+            
+            // 获取当前图片数据并处理
+            let imageFieldValue = '';
+            if (window.comicReaderApp.zipProcessor) {
+                const currentImage = window.comicReaderApp.zipProcessor.getCurrentImageData();
+                if (currentImage) {
+                    console.log('找到当前图片数据，开始处理...');
+                    try {
+                        const imageHtml = await this.processImageForAnki(currentImage);
+                        if (imageHtml) {
+                            imageFieldValue = imageHtml;
+                            console.log('图片处理成功:', imageHtml);
+                        }
+                    } catch (imageError) {
+                        console.error('图片处理失败，继续添加卡片（不含图片）:', imageError);
+                    }
+                }
+            }
+            
+            // 准备卡片数据
+            const cardData = {
+                sentence: sentence || '',
+                word: word,
+                meaning: definition || '',
+                image: imageFieldValue
+            };
+            
+            console.log('准备添加卡片数据:', cardData);
+            
+            // 添加到Anki
+            const result = await window.comicReaderApp.ankiSettings.addCardToAnki(
+                cardData.sentence,
+                cardData.word,
+                cardData.meaning,
+                cardData.image
+            );
+            
+            this.showNotification('成功添加到Anki！', 'success');
+            console.log('Anki卡片添加成功:', result);
+            
+        } catch (error) {
+            console.error('添加到Anki失败:', error);
+            this.showNotification('添加到Anki失败: ' + error.message, 'error');
+        } finally {
+            // 恢复按钮状态
+            if (this.panelAnkiBtn) {
+                this.panelAnkiBtn.innerHTML = '<img src="./assets/icons8-anki-24.png" alt="Anki" class="anki-icon"> 添加到Anki';
+                this.panelAnkiBtn.disabled = false;
+            }
+        }
+    }
+
+    /**
+     * 获取当前释义
+     */
+    getCurrentDefinition() {
+        try {
+            const activeTab = document.querySelector('.tab-button.active');
+            if (!activeTab) return '';
+            
+            const activeTabId = activeTab.getAttribute('data-tab');
+            console.log('当前激活标签页:', activeTabId);
+            
+            switch (activeTabId) {
+                case 'dictionary-tab':
+                    return this.panelDictionaryResult?.textContent || '';
+                case 'custom-tab':
+                    const customInput = document.getElementById('panel-custom-definition-input');
+                    return customInput?.value || '';
+                case 'tampermonkey-tab':
+                    const tampermonkeyResult = document.getElementById('panel-tampermonkey-result');
+                    return tampermonkeyResult?.textContent || '';
+                default:
+                    return '';
+            }
+        } catch (error) {
+            console.error('获取释义失败:', error);
+            return '';
+        }
+    }
+
+    /**
+     * 处理图片数据用于Anki
+     */
+    async processImageForAnki(imageData) {
+        try {
+            console.log('处理图片数据:', imageData);
+            
+            if (!imageData || !imageData.blob) {
+                console.warn('没有可用的图片数据');
+                return null;
+            }
+
+            // 将图片Blob转换为Base64
+            const base64Image = await this.blobToBase64(imageData.blob);
+            
+            // 生成图片文件名
+            const imageFileName = this.generateImageFileName();
+            
+            // 存储图片到Anki媒体库
+            const storedName = await this.storeImageToAnki(imageFileName, base64Image);
+            
+            // 返回Anki媒体引用格式
+            return `<img src="${storedName}">`;
+            
+        } catch (error) {
+            console.error('处理图片失败:', error);
+            return null;
+        }
+    }
+
+    /**
+     * 将Blob转换为Base64
+     */
+    blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            try {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * 生成图片文件名
+     */
+    generateImageFileName() {
+        const timestamp = new Date().getTime();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        return `comic_reader_${timestamp}_${randomStr}.jpg`;
+    }
+
+    /**
+     * 存储图片到Anki媒体库
+     */
+    async storeImageToAnki(filename, base64Image) {
+        try {
+            console.log('存储图片到Anki媒体库:', filename);
+            
+            if (!window.comicReaderApp || !window.comicReaderApp.ankiSettings) {
+                throw new Error('Anki设置未初始化');
+            }
+
+            const response = await window.comicReaderApp.ankiSettings.makeAnkiRequest('storeMediaFile', {
+                filename: filename,
+                data: base64Image.split(',')[1], // 移除data:image/jpeg;base64,前缀
+                deleteExisting: true
+            });
+
+            if (response.error) {
+                throw new Error(response.error);
+            }
+
+            const storedName = response.result || filename;
+            console.log('图片文件实际存储名:', storedName);
+            return storedName;
+            
+        } catch (error) {
+            console.error('存储图片到Anki失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 显示通知
+     */
+    showNotification(message, type = 'info') {
+        try {
+            // 移除现有的通知
+            const existingNotification = document.querySelector('.dictionary-notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+            
+            const notification = document.createElement('div');
+            notification.className = `dictionary-notification dictionary-notification-${type}`;
+            notification.textContent = message;
+            
+            // 添加样式
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                z-index: 10000;
+                font-size: 14px;
+                max-width: 300px;
+                box-shadow: var(--shadow);
+                ${type === 'success' ? 'background: #4CAF50;' : ''}
+                ${type === 'error' ? 'background: #f44336;' : ''}
+                ${type === 'info' ? 'background: #2196F3;' : ''}
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.parentElement.removeChild(notification);
+                }
+            }, 3000);
+        } catch (error) {
+            console.error('显示通知失败:', error);
+        }
+    }
+
+}
+
+// Anki设置功能
+class AnkiSettings {
+    constructor() {
+        this.initElements();
+        this.initEventListeners();
+        this.loadSettings();
+        console.log('AnkiSettings初始化完成');
+    }
+
+    initElements() {
+        console.log('初始化Anki设置元素...');
+        
+        // 直接获取所有元素
+        this.ankiIp = document.getElementById('anki-ip');
+        this.ankiPort = document.getElementById('anki-port');
+        this.ankiDeck = document.getElementById('anki-deck');
+        this.ankiNoteType = document.getElementById('anki-note-type');
+        this.sentenceField = document.getElementById('sentence-field');
+        this.wordField = document.getElementById('word-field');
+        this.meaningField = document.getElementById('meaning-field');
+        this.imageField = document.getElementById('image-field');
+        this.testConnectionBtn = document.getElementById('test-connection');
+        this.saveSettingsBtn = document.getElementById('save-anki-settings');
+
+        // 创建字段选择器
+        this.createFieldSelectors();
+
+        // 检查元素是否存在
+        this.checkElements();
+    }
+
+    /**
+     * 创建字段选择器
+     */
+    createFieldSelectors() {
+        // 将句子字段输入框替换为选择器
+        if (this.sentenceField && this.sentenceField.tagName === 'INPUT') {
+            const select = document.createElement('select');
+            select.id = 'sentence-field';
+            select.className = this.sentenceField.className;
+            select.innerHTML = '<option value="">加载字段...</option>';
+            this.sentenceField.parentNode.replaceChild(select, this.sentenceField);
+            this.sentenceField = select;
+        }
+
+        // 将单词字段输入框替换为选择器
+        if (this.wordField && this.wordField.tagName === 'INPUT') {
+            const select = document.createElement('select');
+            select.id = 'word-field';
+            select.className = this.wordField.className;
+            select.innerHTML = '<option value="">加载字段...</option>';
+            this.wordField.parentNode.replaceChild(select, this.wordField);
+            this.wordField = select;
+        }
+
+        // 将释义字段输入框替换为选择器
+        if (this.meaningField && this.meaningField.tagName === 'INPUT') {
+            const select = document.createElement('select');
+            select.id = 'meaning-field';
+            select.className = this.meaningField.className;
+            select.innerHTML = '<option value="">加载字段...</option>';
+            this.meaningField.parentNode.replaceChild(select, this.meaningField);
+            this.meaningField = select;
+        }
+
+        // 将图片字段输入框替换为选择器
+        if (this.imageField && this.imageField.tagName === 'INPUT') {
+            const select = document.createElement('select');
+            select.id = 'image-field';
+            select.className = this.imageField.className;
+            select.innerHTML = '<option value="">加载字段...</option>';
+            this.imageField.parentNode.replaceChild(select, this.imageField);
+            this.imageField = select;
+        }
+    }
+
+    checkElements() {
+        const elements = {
+            'anki-ip': this.ankiIp,
+            'anki-port': this.ankiPort,
+            'anki-deck': this.ankiDeck,
+            'anki-note-type': this.ankiNoteType,
+            'sentence-field': this.sentenceField,
+            'word-field': this.wordField,
+            'meaning-field': this.meaningField,
+            'image-field': this.imageField,
+            'test-connection': this.testConnectionBtn,
+            'save-anki-settings': this.saveSettingsBtn
+        };
+
+        for (const [id, element] of Object.entries(elements)) {
+            if (!element) {
+                console.error(`未找到元素: #${id}`);
+            } else {
+                console.log(`找到元素: #${id}`, element.tagName);
+            }
+        }
+    }
+
+    initEventListeners() {
+        console.log('初始化Anki事件监听器...');
+        
+        // 连接测试
+        if (this.testConnectionBtn) {
+            this.testConnectionBtn.addEventListener('click', () => {
+                console.log('点击连接测试按钮');
+                this.testConnection();
+            });
+        } else {
+            console.error('连接测试按钮未找到');
+        }
+
+        // 保存设置
+        if (this.saveSettingsBtn) {
+            this.saveSettingsBtn.addEventListener('click', () => {
+                console.log('点击保存设置按钮');
+                this.saveSettings();
+            });
+        } else {
+            console.error('保存设置按钮未找到');
+        }
+
+        // IP或端口变化时重新加载牌组和模板
+        if (this.ankiIp && this.ankiPort) {
+            this.ankiIp.addEventListener('change', () => {
+                this.loadDecksAndModels();
+            });
+            this.ankiPort.addEventListener('change', () => {
+                this.loadDecksAndModels();
+            });
+        }
+
+        // 模板变化时加载字段
+        if (this.ankiNoteType) {
+            this.ankiNoteType.addEventListener('change', () => {
+                console.log('模板选择变化:', this.ankiNoteType.value);
+                if (this.ankiNoteType.value) {
+                    this.loadModelFields(this.ankiNoteType.value);
+                }
+            });
+        }
+    }
+
+    /**
+     * 测试Anki连接并加载牌组和模板
+     */
+    async testConnection() {
+        console.log('开始测试Anki连接...');
+        
+        const ip = this.ankiIp?.value || '127.0.0.1';
+        const port = this.ankiPort?.value || '8765';
+        
+        if (!ip || !port) {
+            this.showMessage('请填写IP地址和端口号', 'error');
+            return;
+        }
+
+        try {
+            this.showMessage('正在测试连接...', 'info');
+            this.testConnectionBtn.disabled = true;
+            this.testConnectionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>连接中...</span>';
+            
+            // 测试连接
+            const response = await this.makeAnkiRequest('version');
+            
+            if (response.error) {
+                throw new Error(response.error);
+            }
+
+            this.showMessage('连接成功！Anki版本: ' + response.result, 'success');
+            
+            // 连接成功后加载牌组和模板
+            await this.loadDecksAndModels();
+            
+        } catch (error) {
+            console.error('Anki连接测试失败:', error);
+            this.showMessage('连接失败: ' + error.message, 'error');
+        } finally {
+            // 恢复按钮状态
+            if (this.testConnectionBtn) {
+                this.testConnectionBtn.disabled = false;
+                this.testConnectionBtn.innerHTML = '<i class="fas fa-plug"></i><span>连接测试</span>';
+            }
+        }
+    }
+
+    /**
+     * 加载牌组和模板列表
+     */
+    async loadDecksAndModels() {
+        try {
+            console.log('加载牌组和模板列表...');
+            
+            // 加载牌组列表
+            const decksResponse = await this.makeAnkiRequest('deckNames');
+            if (!decksResponse.error && Array.isArray(decksResponse.result)) {
+                this.updateDeckSelector(decksResponse.result);
+                console.log('加载牌组成功:', decksResponse.result.length);
+            } else {
+                console.error('加载牌组失败:', decksResponse.error);
+            }
+
+            // 加载模板列表
+            const modelsResponse = await this.makeAnkiRequest('modelNames');
+            if (!modelsResponse.error && Array.isArray(modelsResponse.result)) {
+                this.updateModelSelector(modelsResponse.result);
+                console.log('加载模板成功:', modelsResponse.result.length);
+                
+                // 如果当前有选中的模板，加载其字段
+                if (this.ankiNoteType && this.ankiNoteType.value) {
+                    await this.loadModelFields(this.ankiNoteType.value);
+                }
+            } else {
+                console.error('加载模板失败:', modelsResponse.error);
+            }
+
+        } catch (error) {
+            console.error('加载牌组和模板失败:', error);
+        }
+    }
+
+    /**
+     * 加载模板字段
+     */
+    async loadModelFields(modelName) {
+        if (!modelName) {
+            console.log('未选择模板，跳过字段加载');
+            return;
+        }
+
+        try {
+            console.log(`加载模板字段: ${modelName}`);
+            
+            const fieldsResponse = await this.makeAnkiRequest('modelFieldNames', {
+                modelName: modelName
+            });
+
+            if (!fieldsResponse.error && Array.isArray(fieldsResponse.result)) {
+                this.updateFieldSelectors(fieldsResponse.result);
+                console.log('加载字段成功:', fieldsResponse.result);
+            } else {
+                console.error('加载字段失败:', fieldsResponse.error);
+                this.updateFieldSelectors([]);
+            }
+        } catch (error) {
+            console.error('加载模板字段失败:', error);
+            this.updateFieldSelectors([]);
+        }
+    }
+
+    /**
+     * 更新牌组选择器
+     */
+    updateDeckSelector(decks) {
+        if (!this.ankiDeck) {
+            console.error('牌组选择器未找到');
+            return;
+        }
+
+        const currentValue = this.ankiDeck.value;
+        this.ankiDeck.innerHTML = '';
+        
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = decks.length > 0 ? '选择牌组...' : '无可用牌组';
+        this.ankiDeck.appendChild(defaultOption);
+
+        // 添加牌组选项
+        decks.forEach(deck => {
+            const option = document.createElement('option');
+            option.value = deck;
+            option.textContent = deck;
+            if (deck === currentValue || deck === ankiSettings.deck) {
+                option.selected = true;
+            }
+            this.ankiDeck.appendChild(option);
+        });
+
+        console.log('牌组选择器更新完成');
+    }
+
+    /**
+     * 更新模板选择器
+     */
+    updateModelSelector(models) {
+        if (!this.ankiNoteType) {
+            console.error('模板选择器未找到');
+            return;
+        }
+
+        const currentValue = this.ankiNoteType.value;
+        this.ankiNoteType.innerHTML = '';
+        
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = models.length > 0 ? '选择模板...' : '无可用模板';
+        this.ankiNoteType.appendChild(defaultOption);
+
+        // 添加模板选项
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            if (model === currentValue || model === ankiSettings.noteType) {
+                option.selected = true;
+            }
+            this.ankiNoteType.appendChild(option);
+        });
+
+        console.log('模板选择器更新完成');
+    }
+
+    /**
+     * 更新字段选择器
+     */
+    updateFieldSelectors(fields) {
+        console.log('更新字段选择器:', fields);
+        
+        // 更新句子字段选择器
+        this.updateSingleFieldSelector(this.sentenceField, fields, ankiSettings.sentenceField, '句子');
+        
+        // 更新单词字段选择器
+        this.updateSingleFieldSelector(this.wordField, fields, ankiSettings.wordField, '单词');
+        
+        // 更新释义字段选择器
+        this.updateSingleFieldSelector(this.meaningField, fields, ankiSettings.meaningField, '释义');
+        
+        // 更新图片字段选择器
+        this.updateSingleFieldSelector(this.imageField, fields, ankiSettings.imageField, '图片');
+
+        console.log('字段选择器更新完成');
+    }
+
+    /**
+     * 更新单个字段选择器
+     */
+    updateSingleFieldSelector(selector, fields, savedValue, defaultValue) {
+        if (!selector) {
+            console.error('字段选择器未找到');
+            return;
+        }
+
+        const currentValue = selector.value;
+        selector.innerHTML = '';
+        
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = fields.length > 0 ? `选择${defaultValue}字段...` : '无可用字段';
+        selector.appendChild(defaultOption);
+
+        // 添加字段选项
+        fields.forEach(field => {
+            const option = document.createElement('option');
+            option.value = field;
+            option.textContent = field;
+            
+            // 优先使用当前值，然后是保存的值，最后是默认匹配
+            if (field === currentValue) {
+                option.selected = true;
+            } else if (field === savedValue) {
+                option.selected = true;
+            } else if (!selector.value && this.autoMatchField(field, defaultValue)) {
+                option.selected = true;
+            }
+            
+            selector.appendChild(option);
+        });
+
+        // 如果没有选中任何选项，选择第一个字段
+        if (!selector.value && fields.length > 0) {
+            selector.value = fields[0];
+        }
+    }
+
+    /**
+     * 自动匹配字段名称
+     */
+    autoMatchField(fieldName, fieldType) {
+        const fieldNameLower = fieldName.toLowerCase();
+        const fieldTypeLower = fieldType.toLowerCase();
+        
+        // 常见字段名称匹配规则
+        const matchRules = {
+            '句子': ['sentence', 'text', 'content', '原文', '例句'],
+            '单词': ['word', 'vocabulary', 'term', '单词', '词汇'],
+            '释义': ['meaning', 'definition', 'explanation', '释义', '解释'],
+            '图片': ['image', 'picture', 'photo', '图片', '插图']
+        };
+
+        const rules = matchRules[fieldType] || [];
+        return rules.some(rule => fieldNameLower.includes(rule));
+    }
+
+    /**
+     * 向Anki发送请求
+     */
+    async makeAnkiRequest(action, params = {}) {
+        const ip = this.ankiIp?.value || '127.0.0.1';
+        const port = this.ankiPort?.value || '8765';
+
+        console.log(`向Anki发送请求: ${action}`, { ip, port, params });
+
+        try {
+            const response = await fetch(`http://${ip}:${port}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: action,
+                    version: 6,
+                    params: params
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP错误: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log(`Anki响应:`, result);
+            return result;
+        } catch (error) {
+            console.error('Anki请求失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 保存Anki设置
+     */
+    saveSettings() {
+        try {
+            console.log('保存Anki设置...');
+            
+            // 更新设置对象
+            ankiSettings = {
+                ip: this.ankiIp?.value || '127.0.0.1',
+                port: this.ankiPort?.value || '8765',
+                deck: this.ankiDeck?.value || '',
+                noteType: this.ankiNoteType?.value || '',
+                sentenceField: this.sentenceField?.value || '',
+                wordField: this.wordField?.value || '',
+                meaningField: this.meaningField?.value || '',
+                imageField: this.imageField?.value || ''
+            };
+
+            // 保存到localStorage
+            localStorage.setItem('ankiSettings', JSON.stringify(ankiSettings));
+            
+            this.showMessage('设置保存成功！', 'success');
+            console.log('Anki设置已保存:', ankiSettings);
+        } catch (error) {
+            console.error('保存设置失败:', error);
+            this.showMessage('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 加载Anki设置
+     */
+    loadSettings() {
+        try {
+            console.log('加载Anki设置...');
+            const savedSettings = localStorage.getItem('ankiSettings');
+            if (savedSettings) {
+                ankiSettings = JSON.parse(savedSettings);
+                
+                // 更新界面
+                if (this.ankiIp) this.ankiIp.value = ankiSettings.ip;
+                if (this.ankiPort) this.ankiPort.value = ankiSettings.port;
+                if (this.ankiDeck) this.ankiDeck.value = ankiSettings.deck;
+                if (this.ankiNoteType) this.ankiNoteType.value = ankiSettings.noteType;
+                if (this.sentenceField) this.sentenceField.value = ankiSettings.sentenceField;
+                if (this.wordField) this.wordField.value = ankiSettings.wordField;
+                if (this.meaningField) this.meaningField.value = ankiSettings.meaningField;
+                if (this.imageField) this.imageField.value = ankiSettings.imageField;
+                
+                console.log('Anki设置已加载:', ankiSettings);
+            }
+
+            // 尝试自动加载牌组和模板
+            setTimeout(() => {
+                this.loadDecksAndModels();
+            }, 500);
+        } catch (error) {
+            console.error('加载设置失败:', error);
+        }
+    }
+
+    /**
+     * 显示消息
+     */
+    showMessage(message, type = 'info') {
+        // 移除现有的消息
+        const existingMessage = document.querySelector('.anki-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `anki-message anki-message-${type}`;
+        messageDiv.textContent = message;
+
+        document.body.appendChild(messageDiv);
+
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (messageDiv.parentElement) {
+                messageDiv.parentElement.removeChild(messageDiv);
+            }
+        }, 3000);
+    }
+
+    /**
+     * 向Anki添加卡片（支持图片）
+     */
+    async addCardToAnki(sentence, word, meaning, imageHtml = '') {
+        try {
+            console.log('开始添加Anki卡片:', { sentence, word, meaning, hasImage: !!imageHtml });
+            
+            // 获取当前设置
+            const deckName = this.ankiDeck?.value || ankiSettings.deck;
+            const modelName = this.ankiNoteType?.value || ankiSettings.noteType;
+            
+            if (!deckName || !modelName) {
+                throw new Error('请先选择牌组和笔记类型');
+            }
+            
+            // 构建字段数据
+            const fields = {
+                [ankiSettings.sentenceField]: sentence,
+                [ankiSettings.wordField]: word,
+                [ankiSettings.meaningField]: meaning
+            };
+            
+            // 如果有图片，添加到对应的字段
+            if (imageHtml && ankiSettings.imageField) {
+                fields[ankiSettings.imageField] = imageHtml;
+            }
+            
+            const note = {
+                deckName: deckName,
+                modelName: modelName,
+                fields: fields,
+                options: {
+                    allowDuplicate: false,
+                    duplicateScope: "deck"
+                },
+                tags: ["漫画阅读器"]
+            };
+
+            console.log('准备发送Anki请求:', note);
+            
+            const response = await this.makeAnkiRequest('addNote', {
+                note: note
+            });
+
+            if (response.error) {
+                throw new Error(response.error);
+            }
+
+            console.log('Anki卡片添加成功:', response.result);
+            return response.result;
+        } catch (error) {
+            console.error('添加Anki卡片失败:', error);
+            throw error;
+        }
+    }
 }
 
 // 视图控制功能
@@ -1266,6 +2177,9 @@ class ViewController {
         this.centerViewBtn = document.getElementById('center-view');
         this.sidebarToggleBtn = document.getElementById('sidebar-toggle');
         this.sidebarControls = document.getElementById('sidebar-controls');
+        
+        // 新增：顶部设置按钮
+        this.sidebarToggleHeaderBtn = document.getElementById('sidebar-toggle-header');
         
         // 侧边栏选项
         this.readingModeRadios = document.querySelectorAll('input[name="reading-mode"]');
@@ -1353,9 +2267,16 @@ class ViewController {
             });
         }
 
-        // 侧边栏切换
+        // 侧边栏切换 - 侧边按钮
         if (this.sidebarToggleBtn) {
             this.sidebarToggleBtn.addEventListener('click', () => {
+                this.toggleSidebar();
+            });
+        }
+
+        // 新增：顶部设置按钮
+        if (this.sidebarToggleHeaderBtn) {
+            this.sidebarToggleHeaderBtn.addEventListener('click', () => {
                 this.toggleSidebar();
             });
         }
@@ -1411,6 +2332,52 @@ class ViewController {
 
         // 边缘点击区域
         this.initEdgeClickAreas();
+
+        // 侧边栏下拉分组功能
+        this.initCollapsibleGroups();
+    }
+
+    /**
+     * 初始化可折叠分组
+     */
+    initCollapsibleGroups() {
+        const groups = document.querySelectorAll('.sidebar-group.collapsible');
+        
+        groups.forEach(group => {
+            const header = group.querySelector('.group-header');
+            const content = group.querySelector('.group-content');
+            
+            if (header && content) {
+                header.addEventListener('click', () => {
+                    const isActive = group.classList.contains('active');
+                    
+                    // 关闭所有其他分组
+                    groups.forEach(otherGroup => {
+                        if (otherGroup !== group) {
+                            otherGroup.classList.remove('active');
+                            otherGroup.querySelector('.group-content').style.maxHeight = '0';
+                        }
+                    });
+                    
+                    // 切换当前分组
+                    if (!isActive) {
+                        group.classList.add('active');
+                        content.style.maxHeight = content.scrollHeight + 'px';
+                    } else {
+                        group.classList.remove('active');
+                        content.style.maxHeight = '0';
+                    }
+                });
+            }
+        });
+        
+        // 默认展开第一个分组
+        if (groups.length > 0) {
+            const firstGroup = groups[0];
+            const firstContent = firstGroup.querySelector('.group-content');
+            firstGroup.classList.add('active');
+            firstContent.style.maxHeight = firstContent.scrollHeight + 'px';
+        }
     }
 
     /**
@@ -1706,7 +2673,21 @@ class ViewController {
      */
     toggleSidebar() {
         if (this.sidebarControls) {
+            const isOpening = !this.sidebarControls.classList.contains('active');
             this.sidebarControls.classList.toggle('active');
+            
+            // 如果是在移动端打开侧边栏，隐藏移动控制按钮
+            if (window.innerWidth <= 768 && this.prevMobileBtn && this.nextMobileBtn) {
+                if (isOpening) {
+                    this.prevMobileBtn.style.display = 'none';
+                    this.nextMobileBtn.style.display = 'none';
+                } else {
+                    this.prevMobileBtn.style.display = 'flex';
+                    this.nextMobileBtn.style.display = 'flex';
+                }
+            }
+            
+            console.log(`侧边栏${isOpening ? '打开' : '关闭'}`);
         }
     }
 
@@ -1817,6 +2798,14 @@ class ViewController {
                 }
                 e.preventDefault();
                 break;
+                
+            // 新增：侧边栏切换快捷键
+            case 's':
+            case 'S':
+                // 切换侧边栏
+                this.toggleSidebar();
+                e.preventDefault();
+                break;
         }
     }
 
@@ -1847,7 +2836,8 @@ class ComicReaderApp {
                 throw new Error('JSZip库未加载！请确保在之前引入JSZip');
             }
             
-            // 初始化处理器
+            // 初始化处理器 - 确保ankiSettings在其他组件之前初始化
+            this.ankiSettings = new AnkiSettings();
             this.zipProcessor = new ZipProcessor();
             this.mokuroParser = new MokuroParser();
             this.viewController = new ViewController();
@@ -1972,7 +2962,11 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM内容已加载，开始初始化应用...');
     try {
         window.comicReaderApp = new ComicReaderApp();
-        console.log('漫画阅读器应用初始化完成');
+        console.log('漫画阅读器应用初始化完成', {
+            ankiSettings: !!window.comicReaderApp.ankiSettings,
+            zipProcessor: !!window.comicReaderApp.zipProcessor,
+            dictionaryPanel: !!window.comicReaderApp.dictionaryPanel
+        });
     } catch (error) {
         console.error('应用初始化失败:', error);
         const errorMessage = document.createElement('div');

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>漫画阅读器 - 自由移动与缩放</title>
+    <title>漫画阅读器-测试</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
 </head>
@@ -29,8 +29,14 @@
                     </label>
                     <input type="file" id="mokuro-file" accept=".mokuro" />
                 </div>
+                <!-- 新增侧边栏开关按钮 -->
+                <div class="upload-group">
+                    <button id="sidebar-toggle-header" class="upload-label">
+                        <i class="fas fa-sliders-h"></i>
+                        <span>设置</span>
+                    </button>
+                </div>
             </div>
-
         </div>
     </header>
 
@@ -42,159 +48,139 @@
         
         <div class="sidebar-content">
             <!-- 页面导航 -->
-            <div class="sidebar-group">
-                <h3>页面导航</h3>
-                <div class="page-navigation">
-                    <button id="prev-page" class="nav-btn" title="上一页">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <div class="page-info">
-                        <span id="current-page">0</span>
-                        <span>/</span>
-                        <span id="total-pages">0</span>
+            <div class="sidebar-group collapsible">
+                <div class="group-header">
+                    <h3><i class="fas fa-file-alt"></i>页面导航</h3>
+                    <span class="collapse-icon"><i class="fas fa-chevron-down"></i></span>
+                </div>
+                <div class="group-content">
+                    <div class="page-navigation">
+                        <button id="prev-page" class="nav-btn" title="上一页">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <div class="page-info">
+                            <span id="current-page">0</span>
+                            <span>/</span>
+                            <span id="total-pages">0</span>
+                        </div>
+                        <button id="next-page" class="nav-btn" title="下一页">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
-                    <button id="next-page" class="nav-btn" title="下一页">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 显示模式 -->
-            <div class="sidebar-group">
-                <h3>显示模式</h3>
-                <div class="button-group">
-                    <button id="view-mode-responsive" class="control-btn active" data-mode="responsive">
-                        <i class="fas fa-expand"></i>
-                        <span>自适应</span>
-                    </button>
-                    <button id="view-mode-fixed" class="control-btn" data-mode="fixed">
-                        <i class="fas fa-desktop"></i>
-                        <span>固定宽度</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 适配模式 -->
-            <div class="sidebar-group">
-                <h3>适配模式</h3>
-                <div class="button-group">
-                    <button id="fit-mode-width" class="control-btn active" data-mode="width">
-                        <i class="fas fa-arrows-alt-h"></i>
-                        <span>宽度适配</span>
-                    </button>
-                    <button id="fit-mode-height" class="control-btn" data-mode="height">
-                        <i class="fas fa-arrows-alt-v"></i>
-                        <span>高度适配</span>
-                    </button>
-                    <button id="fit-mode-both" class="control-btn" data-mode="both">
-                        <i class="fas fa-compress"></i>
-                        <span>完整适配</span>
-                    </button>
                 </div>
             </div>
 
             <!-- 功能开关 -->
-            <div class="sidebar-group">
-                <h3>功能开关</h3>
-                <div class="button-group">
-                    <button id="toggle-highlight" class="control-btn" data-active="false">
-                        <i class="fas fa-highlighter"></i>
-                        <span>OCR高亮</span>
-                    </button>
-                    <button id="toggle-overlay" class="control-btn active" data-active="true">
-                        <i class="fas fa-layer-group"></i>
-                        <span>文本覆盖</span>
-                    </button>
+            <div class="sidebar-group collapsible">
+                <div class="group-header">
+                    <h3><i class="fas fa-toggle-on"></i>功能开关</h3>
+                    <span class="collapse-icon"><i class="fas fa-chevron-down"></i></span>
                 </div>
-            </div>
-
-            <!-- 缩放控制 -->
-            <div class="sidebar-group">
-                <h3>缩放控制</h3>
-                <div class="zoom-controls">
-                    <button id="zoom-out" class="zoom-btn" title="缩小">
-                        <i class="fas fa-search-minus"></i>
-                    </button>
-                    <span id="zoom-level">100%</span>
-                    <button id="zoom-in" class="zoom-btn" title="放大">
-                        <i class="fas fa-search-plus"></i>
-                    </button>
-                    <button id="zoom-reset" class="zoom-btn" title="重置缩放">
-                        <i class="fas fa-sync"></i>
-                    </button>
-                    <button id="center-view" class="zoom-btn" title="居中视图">
-                        <i class="fas fa-crosshairs"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 阅读模式 -->
-            <div class="sidebar-group">
-                <h3>阅读模式</h3>
-                <div class="radio-group">
-                    <label class="radio-option">
-                        <input type="radio" name="reading-mode" value="single" checked>
-                        <span class="radio-custom"></span>
-                        <span>单页模式</span>
-                    </label>
-                    <label class="radio-option">
-                        <input type="radio" name="reading-mode" value="double">
-                        <span class="radio-custom"></span>
-                        <span>双页模式</span>
-                    </label>
-                    <label class="radio-option">
-                        <input type="radio" name="reading-mode" value="webtoon">
-                        <span class="radio-custom"></span>
-                        <span>条漫模式</span>
-                    </label>
+                <div class="group-content">
+                    <div class="button-group">
+                        <button id="toggle-highlight" class="control-btn" data-active="false">
+                            <i class="fas fa-highlighter"></i>
+                            <span>OCR高亮</span>
+                        </button>
+                        <button id="toggle-overlay" class="control-btn active" data-active="true">
+                            <i class="fas fa-layer-group"></i>
+                            <span>文本覆盖</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- 显示设置 -->
-            <div class="sidebar-group">
-                <h3>显示设置</h3>
-                <div class="checkbox-group">
-                    <label class="checkbox-option">
-                        <input type="checkbox" id="show-page-numbers" checked>
-                        <span class="checkbox-custom"></span>
-                        <span>显示页码</span>
-                    </label>
-                    <label class="checkbox-option">
-                        <input type="checkbox" id="show-ocr-boxes" checked>
-                        <span class="checkbox-custom"></span>
-                        <span>显示OCR框</span>
-                    </label>
-                    <label class="checkbox-option">
-                        <input type="checkbox" id="auto-fit-images" checked>
-                        <span class="checkbox-custom"></span>
-                        <span>自动适配图片</span>
-                    </label>
+            <div class="sidebar-group collapsible">
+                <div class="group-header">
+                    <h3><i class="fas fa-eye"></i>显示设置</h3>
+                    <span class="collapse-icon"><i class="fas fa-chevron-down"></i></span>
+                </div>
+                <div class="group-content">
+                    <div class="checkbox-group">
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="show-page-numbers" checked>
+                            <span class="checkbox-custom"></span>
+                            <span>显示页码</span>
+                        </label>
+                        <label class="checkbox-option">
+                            <input type="checkbox" id="show-ocr-boxes" checked>
+                            <span class="checkbox-custom"></span>
+                            <span>显示OCR框</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
-            <!-- 快捷键说明 -->
-            <div class="sidebar-group">
-                <h3>快捷键</h3>
-                <div class="shortcut-list">
-                    <div class="shortcut-item">
-                        <kbd>←</kbd>
-                        <span>上一页</span>
+            <!-- Anki设置 -->
+            <div class="sidebar-group collapsible">
+                <div class="group-header">
+                    <h3><i class="fas fa-database"></i>Anki设置</h3>
+                    <span class="collapse-icon"><i class="fas fa-chevron-down"></i></span>
+                </div>
+                <div class="group-content">
+                    <div class="anki-settings">
+                        <div class="setting-item">
+                            <label for="anki-ip">IP地址</label>
+                            <input type="text" id="anki-ip" placeholder="127.0.0.1" value="127.0.0.1">
+                        </div>
+                        <div class="setting-item">
+                            <label for="anki-port">端口号</label>
+                            <input type="text" id="anki-port" placeholder="8765" value="8765">
+                        </div>
+                        <div class="setting-item">
+                            <label for="anki-deck">牌组名称</label>
+                            <select id="anki-deck">
+                                <option value="">连接后加载牌组...</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="anki-note-type">笔记类型</label>
+                            <select id="anki-note-type">
+                                <option value="">连接后加载模板...</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="sentence-field">句子字段</label>
+                            <input type="text" id="sentence-field" placeholder="句子" value="句子">
+                        </div>
+                        <div class="setting-item">
+                            <label for="word-field">单词字段</label>
+                            <input type="text" id="word-field" placeholder="单词" value="单词">
+                        </div>
+                        <div class="setting-item">
+                            <label for="meaning-field">释义字段</label>
+                            <input type="text" id="meaning-field" placeholder="释义" value="释义">
+                        </div>
+                        <div class="setting-item">
+                            <label for="image-field">图片字段</label>
+                            <input type="text" id="image-field" placeholder="图片" value="图片">
+                        </div>
+                        <div class="anki-buttons">
+                            <button id="test-connection" class="anki-btn">
+                                <i class="fas fa-plug"></i>
+                                <span>连接测试</span>
+                            </button>
+                            <button id="save-anki-settings" class="anki-btn primary">
+                                <i class="fas fa-save"></i>
+                                <span>保存设置</span>
+                            </button>
+                        </div>
                     </div>
-                    <div class="shortcut-item">
-                        <kbd>→</kbd>
-                        <span>下一页</span>
-                    </div>
-                    <div class="shortcut-item">
-                        <kbd>Space</kbd>
-                        <span>翻页</span>
-                    </div>
-                    <div class="shortcut-item">
-                        <kbd>F</kbd>
-                        <span>全屏</span>
-                    </div>
-                    <div class="shortcut-item">
-                        <kbd>R</kbd>
-                        <span>重置视图</span>
+                </div>
+            </div>
+
+            <!-- 预留扩展区域 -->
+            <div class="sidebar-group collapsible">
+                <div class="group-header">
+                    <h3><i class="fas fa-plus-circle"></i>其他设置</h3>
+                    <span class="collapse-icon"><i class="fas fa-chevron-down"></i></span>
+                </div>
+                <div class="group-content">
+                    <div class="expandable-content">
+                        <p style="color: var(--text-secondary); font-size: 13px; text-align: center; padding: 20px;">
+                            预留扩展区域，未来可添加更多设置选项
+                        </p>
                     </div>
                 </div>
             </div>
@@ -250,83 +236,74 @@
     <!-- 底部词典面板 -->
     <div class="dictionary-panel" id="dictionary-panel">
         <div class="panel-header">
-            <div class="panel-title">
-                <i class="fas fa-book"></i>
-                <span>词典查询</span>
-            </div>
-            <button class="close-panel" id="close-panel">
-                <i class="fas fa-times"></i>
-            </button>
+            <div class="panel-title" id="panel-word-title">词典查询</div>
+            <button class="close-panel" id="close-panel">×</button>
         </div>
         
-        <div class="panel-content">
-            <!-- 搜索区域 -->
-            <div class="search-section">
-                <div class="search-input-group">
-                    <input type="text" class="search-input" id="panel-search-input" placeholder="输入要查询的单词...">
-                    <button class="search-btn" id="panel-search-btn">
-                        <i class="fas fa-search"></i>
-                    </button>
-                    <button class="append-btn" id="append-word-btn" title="追加词汇">
-                        <i class="fas fa-plus"></i>
-                    </button>
+        <!-- 搜索和Anki按钮 -->
+        <div class="panel-search-anki-container">
+            <div class="panel-search-container">
+                <input type="text" class="panel-search-input" id="panel-search-input" placeholder="输入要查询的单词...">
+                <button class="panel-search-btn" id="panel-search-btn">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button class="append-word-btn" id="append-word-btn" title="追加词汇">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button class="panel-anki-btn" id="panel-add-to-anki-btn" title="添加到Anki">
+                    <img src="./assets/icons8-anki-24.png" alt="Anki" class="anki-icon">
+                </button>
+            </div>
+        </div>
+        
+        <div class="original-sentence" id="original-sentence">
+            原句将显示在这里...
+        </div>
+        
+        <!-- 标签页导航 -->
+        <div class="dictionary-tabs">
+            <button class="tab-button active" data-tab="dictionary-tab">词典释义</button>
+            <button class="tab-button" data-tab="web-tab">网页查询</button>
+            <button class="tab-button" data-tab="tampermonkey-tab" id="tampermonkey-btn">油猴操作</button>
+            <button class="tab-button" data-tab="custom-tab">自定义释义</button>
+        </div>
+
+        <!-- 标签页内容 -->
+        <div class="tab-content">
+            <!-- 词典 -->
+            <div id="dictionary-tab" class="tab-pane active">
+                <div class="dictionary-result" id="panel-dictionary-result">
+                    查询结果将显示在这里...
                 </div>
             </div>
 
-            <!-- 原句显示 -->
-            <div class="original-sentence-section">
-                <div class="section-title">原句内容</div>
-                <div class="original-sentence" id="original-sentence">
-                    点击漫画中的文本区域查看原文...
+            <!-- 网页 -->
+            <div id="web-tab" class="tab-pane">
+                <div class="dictionary-result" id="panel-web-result">
+                    <iframe id="web-search-frame" style="width: 100%; height: 300px; border: none;" src="about:blank"></iframe>
                 </div>
             </div>
 
-            <!-- 标签页导航 -->
-            <div class="dictionary-tabs">
-                <button class="tab-button active" data-tab="dictionary-tab">
-                    <i class="fas fa-book-open"></i>
-                    <span>词典释义</span>
-                </button>
-                <button class="tab-button" data-tab="web-tab">
-                    <i class="fas fa-globe"></i>
-                    <span>网页查询</span>
-                </button>
-                <button class="tab-button" data-tab="custom-tab">
-                    <i class="fas fa-edit"></i>
-                    <span>自定义释义</span>
-                </button>
+            <!-- 油猴结果 -->
+            <div id="tampermonkey-tab" class="tab-pane">
+                <div class="dictionary-result" id="panel-tampermonkey-result">
+                    <div class="loading">等待脚本返回结果...如果没有显示，请手动点击搜索按键</div>
+                    <div class="experiment-info">
+                        还在测试，该功能可以通过油猴脚本添加自定义词典，如需使用请先安装脚本：
+                        <a href="https://github.com/FantasyzeroXYZ/VAMplayer/releases/download/userscripts/userscripts.zip" target="_blank">点击下载脚本压缩包</a>
+                    </div>
+                </div>
             </div>
 
-            <!-- 标签页内容 -->
-            <div class="tab-content">
-                <div id="dictionary-tab" class="tab-pane active">
-                    <div class="dictionary-result" id="panel-dictionary-result">
-                        <div class="empty-state">
-                            <i class="fas fa-search"></i>
-                            <p>请输入要查询的单词</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="web-tab" class="tab-pane">
-                    <div class="dictionary-result" id="panel-web-result">
-                        <iframe id="web-search-frame" src="about:blank"></iframe>
-                    </div>
-                </div>
-
-                <div id="custom-tab" class="tab-pane">
-                    <div class="custom-definition">
-                        <textarea id="panel-custom-definition-input" placeholder="在此输入自定义释义..."></textarea>
-                        <div class="custom-actions">
-                            <button class="save-btn" id="save-custom-definition">
-                                <i class="fas fa-save"></i>
-                                <span>保存释义</span>
-                            </button>
-                        </div>
-                    </div>
+            <!-- 自定义 -->
+            <div id="custom-tab" class="tab-pane">
+                <div class="custom-definition">
+                    <textarea id="panel-custom-definition-input"
+                        placeholder="如果查词没有返回内容或者想自定义释义内容，请在此输入..."></textarea>
                 </div>
             </div>
         </div>
+
     </div>
 
     <!-- 遮罩层 -->
@@ -334,7 +311,6 @@
 
     <!-- 引入JSZip库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    
     <!-- 加载主应用 -->
     <script src="js/script.js"></script>
 </body>
