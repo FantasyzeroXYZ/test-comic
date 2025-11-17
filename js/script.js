@@ -2957,6 +2957,220 @@ class ComicReaderApp {
     }
 }
 
+// ==================== 油猴脚本精确触发接口 ====================
+// 只有在油猴标签页点击搜索时才触发查询
+
+// 油猴脚本相关全局变量
+let japaneseWords = [];
+let currentWord = '';
+let currentMediaType = 'comic';
+let pendingSearchQuery = ''; // 存储待处理的搜索词
+
+/**
+ * 设置单词数据 - 接收油猴脚本返回的查询结果
+ */
+function setWordData(wordOrHtml) {
+    console.log('油猴脚本返回查询结果:', { 
+        contentLength: wordOrHtml?.length,
+        activeTab: activeTab
+    });
+    
+    const tampermonkeyResult = document.getElementById('panel-tampermonkey-result');
+    if (!tampermonkeyResult) {
+        console.warn('油猴结果容器未找到');
+        return;
+    }
+
+    if (!wordOrHtml) {
+        console.warn('油猴脚本返回空内容');
+        tampermonkeyResult.innerHTML = '<div class="info">词典查询无结果</div>';
+        return;
+    }
+
+    try {
+        tampermonkeyResult.innerHTML = wordOrHtml;
+        console.log('油猴内容显示成功');
+        
+    } catch (err) {
+        console.error('显示油猴内容失败:', err);
+        tampermonkeyResult.innerHTML = `<div class="error">内容显示错误: ${err.message}</div>`;
+    }
+}
+
+/**
+ * 设置日语分词结果
+ */
+function setJapaneseSegmentation(words) {
+    japaneseWords = words;
+    currentWordIndex = 0;
+    console.log('油猴脚本: 设置日语分词结果', words);
+}
+
+/**
+ * 设置网页搜索URL
+ */
+function setWebSearchUrl(url) {
+    console.log('油猴脚本: 设置网页搜索URL', url);
+    const webSearchFrame = document.getElementById('web-search-frame');
+    if (webSearchFrame && activeTab === 'web-tab') {
+        webSearchFrame.src = url;
+    }
+}
+
+/**
+ * 获取当前状态 - 油猴脚本在搜索前调用以获取查询词
+ */
+function getMediaPlayerState() {
+    const panelSearchInput = document.getElementById('panel-search-input');
+    const originalSentence = document.getElementById('original-sentence');
+    
+    const state = {
+        currentWord: panelSearchInput?.value || '',
+        currentSentence: originalSentence?.textContent || '',
+        currentLanguageMode: currentLanguageMode,
+        currentMediaType: currentMediaType,
+        clipboardEnabled: clipboardEnabled,
+        activeTab: activeTab
+    };
+    
+    console.log('油猴脚本获取搜索状态:', state);
+    return state;
+}
+
+/**
+ * 切换剪贴板功能
+ */
+function toggleClipboardFunction() {
+    clipboardEnabled = !clipboardEnabled;
+    console.log('剪贴板状态:', clipboardEnabled);
+}
+
+/**
+ * 打开词典面板
+ */
+function openFullscreenDictionary() {
+    console.log('油猴脚本: 打开词典面板');
+    
+    const dictionaryPanel = document.getElementById('dictionary-panel');
+    const panelOverlay = document.getElementById('panel-overlay');
+    
+    if (dictionaryPanel && panelOverlay) {
+        dictionaryPanel.classList.add('active');
+        panelOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        console.log('词典面板已打开');
+    } else {
+        console.error('词典面板元素未找到');
+    }
+}
+
+/**
+ * 检查是否在油猴标签页中搜索
+ */
+function isTampermonkeyTabSearch() {
+    return activeTab === 'tampermonkey-tab';
+}
+
+/**
+ * 获取当前搜索词
+ */
+function getCurrentSearchWord() {
+    const panelSearchInput = document.getElementById('panel-search-input');
+    return panelSearchInput?.value.trim() || '';
+}
+
+// 注册全局接口
+window.mediaPlayer = {
+    setJapaneseSegmentation: setJapaneseSegmentation,
+    setWordData: setWordData,
+    setWebSearchUrl: setWebSearchUrl,
+    getState: getMediaPlayerState,
+    toggleClipboard: toggleClipboardFunction,
+    openDictionary: openFullscreenDictionary
+};
+
+console.log('油猴脚本精确触发接口已注册');
+
+// 修改搜索按钮事件监听，只在油猴标签页时触发油猴脚本
+document.addEventListener('DOMContentLoaded', function() {
+    const originalSearchHandler = window.comicReaderApp?.dictionaryPanel?.handleSearch;
+    
+    // 重写搜索处理逻辑
+    if (window.comicReaderApp && window.comicReaderApp.dictionaryPanel) {
+        const dictionaryPanel = window.comicReaderApp.dictionaryPanel;
+        
+        // 保存原始搜索处理函数
+        const originalHandleSearch = dictionaryPanel.handleSearch.bind(dictionaryPanel);
+        
+        // 重写搜索处理
+        dictionaryPanel.handleSearch = function() {
+            const query = this.panelSearchInput?.value.trim();
+            
+            if (!query) {
+                this.showNotification('请输入要查询的单词');
+                return;
+            }
+            
+            console.log('搜索处理:', { query, activeTab });
+            
+            // 如果在油猴标签页，让油猴脚本处理搜索
+            if (activeTab === 'tampermonkey-tab') {
+                console.log('在油猴标签页中搜索，触发油猴脚本查询');
+                
+                // 显示加载状态
+                const tampermonkeyResult = document.getElementById('panel-tampermonkey-result');
+                if (tampermonkeyResult) {
+                    tampermonkeyResult.innerHTML = `
+                        <div style="text-align:center; padding:40px; color:#6c757d;">
+                            <i class="fas fa-spinner fa-spin" style="font-size:2rem;"></i><br>
+                            <h3 style="margin-top:20px;">正在查询多词典...</h3>
+                            <p>搜索词: "${query}"</p>
+                        </div>
+                    `;
+                }
+                
+                // 油猴脚本会通过 getState() 获取搜索词并开始查询
+                // 查询完成后会调用 setWordData() 显示结果
+                
+            } else {
+                // 其他标签页使用原始搜索逻辑
+                console.log('在其他标签页搜索，使用原始逻辑');
+                originalHandleSearch();
+            }
+        };
+        
+        console.log('搜索按钮事件监听已重写');
+    }
+    
+    // 监听标签页切换
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const tabName = this.getAttribute('data-tab');
+            activeTab = tabName;
+            console.log('切换到标签页:', tabName);
+            
+            // 如果切换到油猴标签页且有搜索词，可以显示提示
+            if (tabName === 'tampermonkey-tab') {
+                const currentWord = getCurrentSearchWord();
+                if (currentWord) {
+                    console.log('油猴标签页已激活，可以点击搜索进行查询');
+                }
+            }
+        });
+    });
+});
+
+// 初始化完成提示
+setTimeout(() => {
+    console.log('油猴脚本接口初始化完成 - 点击搜索时触发模式');
+    console.log('使用流程:');
+    console.log('1. 切换到油猴标签页');
+    console.log('2. 输入搜索词');
+    console.log('3. 点击搜索按钮');
+    console.log('4. 油猴脚本执行查询并返回结果');
+}, 1000);
+
 // 延迟初始化，确保DOM完全加载
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM内容已加载，开始初始化应用...');
