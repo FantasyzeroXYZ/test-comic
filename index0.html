@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>漫画阅读器 - 自由移动与缩放</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>漫画阅读器 - 响应式架构</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-    <!-- 顶部控制栏 - 仅保留文件上传 -->
+    <!-- 顶部控制栏 -->
     <header class="main-header">
         <div class="header-content">
             <h1 class="logo">漫画阅读器</h1>
@@ -18,96 +18,95 @@
                 <div class="upload-group">
                     <label for="comic-file" class="upload-label">
                         <i class="fas fa-file-archive"></i>
-                        <span>漫画</span>
+                        <span>选择漫画文件</span>
                     </label>
                     <input type="file" id="comic-file" accept=".zip,.cbz" />
                 </div>
                 <div class="upload-group">
                     <label for="mokuro-file" class="upload-label">
                         <i class="fas fa-file-alt"></i>
-                        <span>mokuro</span>
+                        <span>选择OCR文件</span>
                     </label>
                     <input type="file" id="mokuro-file" accept=".mokuro" />
                 </div>
             </div>
 
+            <!-- 视图控制区域 -->
+            <div class="view-controls-section">
+                <!-- 显示模式 -->
+                <div class="control-group">
+                    <label>显示模式</label>
+                    <div class="button-group">
+                        <button id="view-mode-responsive" class="control-btn active" data-mode="responsive">
+                            <i class="fas fa-expand"></i>
+                            <span>自适应</span>
+                        </button>
+                        <button id="view-mode-fixed" class="control-btn" data-mode="fixed">
+                            <i class="fas fa-desktop"></i>
+                            <span>固定宽度</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 适配模式 -->
+                <div class="control-group">
+                    <label>适配模式</label>
+                    <div class="button-group">
+                        <button id="fit-mode-width" class="control-btn active" data-mode="width">
+                            <i class="fas fa-arrows-alt-h"></i>
+                            <span>宽度适配</span>
+                        </button>
+                        <button id="fit-mode-height" class="control-btn" data-mode="height">
+                            <i class="fas fa-arrows-alt-v"></i>
+                            <span>高度适配</span>
+                        </button>
+                        <button id="fit-mode-both" class="control-btn" data-mode="both">
+                            <i class="fas fa-compress"></i>
+                            <span>完整适配</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 功能开关 -->
+                <div class="control-group">
+                    <label>功能开关</label>
+                    <div class="button-group">
+                        <button id="toggle-highlight" class="control-btn" data-active="false">
+                            <i class="fas fa-highlighter"></i>
+                            <span>OCR高亮</span>
+                        </button>
+                        <button id="toggle-overlay" class="control-btn active" data-active="true">
+                            <i class="fas fa-layer-group"></i>
+                            <span>文本覆盖</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 页面导航 -->
+            <div class="page-navigation">
+                <button id="prev-page" class="nav-btn" title="上一页">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="page-info">
+                    <span id="current-page">0</span>
+                    <span>/</span>
+                    <span id="total-pages">0</span>
+                </div>
+                <button id="next-page" class="nav-btn" title="下一页">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
         </div>
     </header>
 
-    <!-- 侧边控制面板 - 包含所有控制元素 -->
-    <aside class="sidebar-controls" id="sidebar-controls">
+    <!-- 侧边控制面板 - 默认收起 -->
+    <aside class="sidebar-controls collapsed" id="sidebar-controls">
         <button class="sidebar-toggle" id="sidebar-toggle">
             <i class="fas fa-cog"></i>
         </button>
         
         <div class="sidebar-content">
-            <!-- 页面导航 -->
-            <div class="sidebar-group">
-                <h3>页面导航</h3>
-                <div class="page-navigation">
-                    <button id="prev-page" class="nav-btn" title="上一页">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <div class="page-info">
-                        <span id="current-page">0</span>
-                        <span>/</span>
-                        <span id="total-pages">0</span>
-                    </div>
-                    <button id="next-page" class="nav-btn" title="下一页">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 显示模式 -->
-            <div class="sidebar-group">
-                <h3>显示模式</h3>
-                <div class="button-group">
-                    <button id="view-mode-responsive" class="control-btn active" data-mode="responsive">
-                        <i class="fas fa-expand"></i>
-                        <span>自适应</span>
-                    </button>
-                    <button id="view-mode-fixed" class="control-btn" data-mode="fixed">
-                        <i class="fas fa-desktop"></i>
-                        <span>固定宽度</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 适配模式 -->
-            <div class="sidebar-group">
-                <h3>适配模式</h3>
-                <div class="button-group">
-                    <button id="fit-mode-width" class="control-btn active" data-mode="width">
-                        <i class="fas fa-arrows-alt-h"></i>
-                        <span>宽度适配</span>
-                    </button>
-                    <button id="fit-mode-height" class="control-btn" data-mode="height">
-                        <i class="fas fa-arrows-alt-v"></i>
-                        <span>高度适配</span>
-                    </button>
-                    <button id="fit-mode-both" class="control-btn" data-mode="both">
-                        <i class="fas fa-compress"></i>
-                        <span>完整适配</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 功能开关 -->
-            <div class="sidebar-group">
-                <h3>功能开关</h3>
-                <div class="button-group">
-                    <button id="toggle-highlight" class="control-btn" data-active="false">
-                        <i class="fas fa-highlighter"></i>
-                        <span>OCR高亮</span>
-                    </button>
-                    <button id="toggle-overlay" class="control-btn active" data-active="true">
-                        <i class="fas fa-layer-group"></i>
-                        <span>文本覆盖</span>
-                    </button>
-                </div>
-            </div>
-
             <!-- 缩放控制 -->
             <div class="sidebar-group">
                 <h3>缩放控制</h3>
@@ -121,9 +120,6 @@
                     </button>
                     <button id="zoom-reset" class="zoom-btn" title="重置缩放">
                         <i class="fas fa-sync"></i>
-                    </button>
-                    <button id="center-view" class="zoom-btn" title="居中视图">
-                        <i class="fas fa-crosshairs"></i>
                     </button>
                 </div>
             </div>
@@ -207,16 +203,6 @@
         <div class="comic-viewport" id="comic-viewport">
             <div class="comic-container" id="comic-container">
                 <!-- 漫画页面将在这里动态加载 -->
-                <div class="page-wrapper active" id="page-1">
-                    <div class="image-container">
-                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjExMjUiIHZpZXdCb3g9IjAgMCA4MDAgMTEyNSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwMCIgaGVpZ2h0PSIxMTI1IiBmaWxsPSIjZmZmZmZmIi8+Cjx0ZXh0IHg9IjQwMCIgeT0iNTYyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzMzMzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5pif5b6X5Zu+5YOPPC90ZXh0Pgo8dGV4dCB4PSI0MDAiIHk9IjYwMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNjY2NjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7kuLrkuobkuIDkuKrlj5HnjrDlgZrniYg8L3RleHQ+Cjwvc3ZnPgo=" alt="示例页面1">
-                    </div>
-                </div>
-                <div class="page-wrapper" id="page-2">
-                    <div class="image-container">
-                        <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjExMjUiIHZpZXdCb3g9IjAgMCA4MDAgMTEyNSIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwMCIgaGVpZ2h0PSIxMTI1IiBmaWxsPSIjZjBmMGYwIi8+Cjx0ZXh0IHg9IjQwMCIgeT0iNTYyLjUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzMzMzMzMyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+5pif5b6X5Zu+5YOPPC90ZXh0Pgo8dGV4dCB4PSI0MDAiIHk9IjYwMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNjY2NjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7kuLrkuobkuIDkuKrlj5HnjrDlgZrniYg8L3RleHQ+Cjwvc3ZnPgo=" alt="示例页面2">
-                    </div>
-                </div>
             </div>
             
             <!-- SVG Overlay 容器 -->
@@ -232,7 +218,7 @@
 
             <!-- 页面指示器 -->
             <div class="page-indicator" id="page-indicator">
-                <span class="page-text">第 <span id="indicator-current">1</span> 页 / 共 <span id="indicator-total">2</span> 页</span>
+                <span class="page-text">第 <span id="indicator-current">0</span> 页 / 共 <span id="indicator-total">0</span> 页</span>
             </div>
 
             <!-- 移动端控制按钮 -->

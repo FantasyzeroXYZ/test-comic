@@ -1,9 +1,4 @@
-// 漫画阅读器 - 合并版JS文件（包含词典功能）
-
-// 确保JSZip可用
-if (typeof JSZip === 'undefined') {
-    console.error('JSZip库未加载！请确保在之前引入JSZip');
-}
+// 漫画阅读器 - 响应式版本
 
 // 全局变量
 let currentLanguageMode = 'english';
@@ -13,32 +8,45 @@ let currentOriginalSentence = '';
 let currentSentence = '';
 let clipboardEnabled = false;
 let activeTab = 'dictionary-tab';
-let wasPlayingBeforeDict = false;
-let playerWasPlaying = false;
+let currentViewMode = 'responsive';
+let highlightEnabled = false;
+let currentPageIndex = 0;
+let totalPages = 0;
+let fitMode = 'auto';
+let currentImages = [];
+let zoomLevel = 1.0;
+let currentMokuroData = null;
+
+// 拖拽和缩放相关变量
+let isPanning = false;
+let startPanX, startPanY;
+let translateX = 0, translateY = 0;
+let scale = 1;
+let lastScale = 1;
+let isPinching = false;
+let initialPinchDistance = 0;
 
 // DOM元素引用
 let dictionaryPanel, panelOverlay, panelDictionaryResult, panelSearchInput;
 let panelSearchBtn, appendWordBtn, originalSentence, webSearchFrame;
 let closePanelBtn, tabButtons;
+let comicViewport, comicContainer;
 
 // ZipProcessor类 - 处理漫画ZIP压缩包
 class ZipProcessor {
     constructor() {
         this.zip = new JSZip();
+        this.resizeTimeout = null;
         console.log('ZipProcessor初始化完成');
     }
 
     /**
      * 处理上传的ZIP文件
-     * @param {File} file - 用户选择的ZIP文件
-     * @param {Function} onProgress - 处理进度回调函数
-     * @returns {Promise<Array>} - 解析后的图片数据数组
      */
     async processZipFile(file, onProgress = null) {
         try {
             console.log('开始处理ZIP文件:', file.name);
             
-            // 重新创建JSZip实例，避免重复使用的问题
             const zip = new JSZip();
             const zipContent = await zip.loadAsync(file);
             const imageFiles = [];
@@ -55,7 +63,7 @@ class ZipProcessor {
                 }
             }
 
-            // 按文件名排序，确保页码顺序正确
+            // 按文件名排序
             imageFiles.sort((a, b) => a.filename.localeCompare(b.filename));
             console.log(`找到 ${imageFiles.length} 个图片文件`);
 
@@ -85,8 +93,6 @@ class ZipProcessor {
 
     /**
      * 检查是否为图片文件
-     * @param {string} filename - 文件名
-     * @returns {boolean}
      */
     isImageFile(filename) {
         const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
@@ -96,15 +102,9 @@ class ZipProcessor {
 
     /**
      * 处理单个图片文件
-     * @param {JSZip} zip - JSZip实例
-     * @param {Object} imageFile - 图片文件对象
-     * @returns {Promise<Object>} - 图片数据
      */
     async processImageFile(zip, imageFile) {
-        // 获取图片的ArrayBuffer数据
         const arrayBuffer = await imageFile.zipEntry.async('arraybuffer');
-        
-        // 创建Blob URL用于图片显示
         const blob = new Blob([arrayBuffer]);
         const objectURL = URL.createObjectURL(blob);
 
@@ -118,8 +118,6 @@ class ZipProcessor {
 
     /**
      * 在指定容器中显示图片
-     * @param {Array} imageDataArray - 图片数据数组
-     * @param {HTMLElement} container - 图片容器元素
      */
     displayImages(imageDataArray, container) {
         if (!container) {
@@ -130,16 +128,25 @@ class ZipProcessor {
         container.innerHTML = '';
         console.log(`开始显示 ${imageDataArray.length} 张图片`);
 
-        imageDataArray.forEach((imageData, index) => {
-            const imgWrapper = document.createElement('div');
-            imgWrapper.className = 'comic-page';
-            imgWrapper.dataset.filename = imageData.filename;
-            imgWrapper.dataset.pageIndex = index;
+        currentImages = imageDataArray;
+        totalPages = imageDataArray.length;
+        currentPageIndex = 0;
 
+        // 确保容器可见
+        container.style.display = 'block';
+
+        imageDataArray.forEach((imageData, index) => {
+            const pageWrapper = document.createElement('div');
+            pageWrapper.className = 'page-wrapper';
+            pageWrapper.dataset.filename = imageData.filename;
+            pageWrapper.dataset.pageIndex = index;
+
+            // 直接创建图片，不包含额外的容器
             const img = document.createElement('img');
             img.src = imageData.objectURL;
             img.alt = `漫画页面 ${index + 1} - ${imageData.filename}`;
-            img.loading = 'lazy'; // 懒加载提升性能
+            img.loading = 'eager';
+            img.className = 'comic-image';
 
             // 添加加载错误处理
             img.onerror = () => {
@@ -148,21 +155,478 @@ class ZipProcessor {
             };
 
             img.onload = () => {
-                console.log(`图片加载成功: ${imageData.filename}`);
+                console.log(`图片加载成功: ${imageData.filename}, 尺寸: ${img.naturalWidth}x${img.naturalHeight}`);
+                // 图片加载完成后设置响应式尺寸
+                this.setResponsiveSize(img);
+                
+                // 如果是第一页，确保显示
+                if (index === 0) {
+                    this.showPage(0);
+                }
             };
 
-            imgWrapper.appendChild(img);
-            container.appendChild(imgWrapper);
+            // 创建SVG overlay
+            const svgOverlay = document.createElement('div');
+            svgOverlay.className = 'svg-overlay';
+            svgOverlay.id = `svg-overlay-${index}`;
+
+            pageWrapper.appendChild(img);
+            pageWrapper.appendChild(svgOverlay);
+            container.appendChild(pageWrapper);
+        });
+
+        // 更新页面指示器
+        this.updatePageIndicator();
+
+        // 添加窗口大小变化监听
+        window.addEventListener('resize', () => {
+            this.handleResize();
+        });
+
+        // 强制重新计算尺寸
+        setTimeout(() => {
+            this.handleResize();
+        }, 100);
+    }
+
+    /**
+     * 设置响应式图片尺寸 - 直接自适应显示到上下边界
+     */
+    setResponsiveSize(img) {
+        const viewport = document.querySelector('.comic-viewport');
+        if (!viewport) {
+            console.warn('漫画视口未找到');
+            return;
+        }
+
+        const viewportWidth = viewport.clientWidth;
+        const viewportHeight = viewport.clientHeight;
+        const naturalWidth = img.naturalWidth;
+        const naturalHeight = img.naturalHeight;
+
+        console.log(`设置响应式尺寸: 模式=${fitMode}, 视口=${viewportWidth}x${viewportHeight}, 图片=${naturalWidth}x${naturalHeight}`);
+
+        // 重置样式
+        img.style.width = '';
+        img.style.height = '';
+        img.style.maxWidth = '';
+        img.style.maxHeight = '';
+        img.style.margin = '';
+        img.style.objectFit = '';
+
+        // 直接设置图片样式，不通过额外容器
+        // PC端默认自适应到上下边界
+        if (fitMode === 'auto') {
+            // PC端和移动端统一处理：高度适应视口
+            img.style.width = 'auto';
+            img.style.height = 'auto';
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '100%';
+            img.style.objectFit = 'contain';
+        } else {
+            // 适配模式逻辑
+            switch (fitMode) {
+                case 'width':
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                    img.style.maxWidth = '100%';
+                    img.style.maxHeight = '100%';
+                    img.style.objectFit = 'contain';
+                    break;
+                case 'height':
+                    img.style.width = 'auto';
+                    img.style.height = '100%';
+                    img.style.maxWidth = '100%';
+                    img.style.maxHeight = '100%';
+                    img.style.objectFit = 'contain';
+                    break;
+                case 'both':
+                    img.style.width = 'auto';
+                    img.style.height = 'auto';
+                    img.style.maxWidth = '100%';
+                    img.style.maxHeight = '100%';
+                    img.style.objectFit = 'contain';
+                    break;
+            }
+        }
+
+        // 确保图片居中显示
+        img.style.display = 'block';
+        img.style.margin = '0 auto';
+        
+        console.log(`最终图片尺寸设置完成`);
+        
+        // 延迟更新SVG确保图片尺寸已应用
+        setTimeout(() => {
+            this.updateCurrentSVGOverlay();
+        }, 100);
+    }
+
+    /**
+     * 处理窗口大小变化
+     */
+    handleResize() {
+        if (this.resizeTimeout) {
+            clearTimeout(this.resizeTimeout);
+        }
+        
+        this.resizeTimeout = setTimeout(() => {
+            const currentImg = document.querySelector(`.page-wrapper[data-page-index="${currentPageIndex}"] img`);
+            if (currentImg && currentImg.complete) {
+                this.setResponsiveSize(currentImg);
+                setTimeout(() => {
+                    this.updateCurrentSVGOverlay();
+                }, 100);
+            }
+        }, 250);
+    }
+
+    /**
+     * 更新页面指示器
+     */
+    updatePageIndicator() {
+        const currentPageSpan = document.getElementById('current-page');
+        const totalPagesSpan = document.getElementById('total-pages');
+        if (currentPageSpan) currentPageSpan.textContent = currentPageIndex + 1;
+        if (totalPagesSpan) totalPagesSpan.textContent = totalPages;
+        
+        const indicatorCurrent = document.getElementById('indicator-current');
+        const indicatorTotal = document.getElementById('indicator-total');
+        if (indicatorCurrent) indicatorCurrent.textContent = currentPageIndex + 1;
+        if (indicatorTotal) indicatorTotal.textContent = totalPages;
+    }
+
+    /**
+     * 显示指定页面
+     */
+    showPage(pageIndex) {
+        if (pageIndex < 0 || pageIndex >= totalPages) {
+            return;
+        }
+
+        const pages = document.querySelectorAll('.page-wrapper');
+        
+        // 隐藏所有页面
+        pages.forEach(page => {
+            page.classList.remove('active');
+        });
+
+        // 显示当前页面
+        pages[pageIndex].classList.add('active');
+        currentPageIndex = pageIndex;
+
+        // 更新页面指示器
+        this.updatePageIndicator();
+
+        // 重置视图到自适应状态
+        this.resetViewToFit();
+
+        // 重新计算当前页面图片尺寸
+        const currentImg = document.querySelector(`.page-wrapper[data-page-index="${currentPageIndex}"] img`);
+        if (currentImg && currentImg.complete) {
+            this.setResponsiveSize(currentImg);
+        }
+
+        // 延迟更新SVG overlay
+        setTimeout(() => {
+            this.updateCurrentSVGOverlay();
+            
+            // 移动端额外重绘确保对齐
+            if (window.innerWidth <= 768) {
+                setTimeout(() => {
+                    this.forceRedrawSVGOverlay();
+                }, 500);
+            }
+        }, 200);
+
+        // 更新OCR高亮状态
+        this.updateOCRHighlights();
+
+        console.log(`显示第 ${currentPageIndex + 1} 页`);
+    }
+
+    /**
+     * 重置视图到自适应状态
+     */
+    resetViewToFit() {
+        zoomLevel = 1.0;
+        scale = 1.0;
+        translateX = 0;
+        translateY = 0;
+
+        if (window.comicReaderApp && window.comicReaderApp.viewController) {
+            window.comicReaderApp.viewController.updateTransform();
+        }
+
+        const zoomLevelSpan = document.getElementById('zoom-level');
+        if (zoomLevelSpan) {
+            zoomLevelSpan.textContent = `${Math.round(zoomLevel * 100)}%`;
+        }
+
+        console.log('视图已重置到自适应状态');
+    }
+
+    /**
+     * 下一页
+     */
+    nextPage() {
+        if (currentPageIndex < totalPages - 1) {
+            this.showPage(currentPageIndex + 1);
+        }
+    }
+
+    /**
+     * 上一页
+     */
+    previousPage() {
+        if (currentPageIndex > 0) {
+            this.showPage(currentPageIndex - 1);
+        }
+    }
+
+    /**
+     * 更新当前页面的SVG Overlay
+     */
+    updateCurrentSVGOverlay() {
+        if (!currentMokuroData) return;
+        
+        const currentPage = currentMokuroData.pages[currentPageIndex];
+        if (!currentPage) return;
+        
+        this.updateSVGOverlay(currentPageIndex, currentPage.blocks || []);
+    }
+
+    /**
+     * 更新SVG Overlay（统一移动端和PC端OCR显示）
+     */
+    updateSVGOverlay(pageIndex, blocks = [], retryCount = 0) {
+        if (pageIndex !== currentPageIndex) {
+            console.log(`页面已切换，取消SVG更新: ${pageIndex} -> ${currentPageIndex}`);
+            return;
+        }
+
+        const svgOverlay = document.getElementById(`svg-overlay-${pageIndex}`);
+        if (!svgOverlay) {
+            console.warn(`SVG overlay 未找到: svg-overlay-${pageIndex}`);
+            return;
+        }
+
+        const img = document.querySelector(`.page-wrapper[data-page-index="${pageIndex}"] img`);
+        if (!img) {
+            console.warn(`图片元素未找到: pageIndex=${pageIndex}`);
+            return;
+        }
+
+        // 等待图片完全加载和渲染
+        if (!img.complete || img.naturalWidth === 0) {
+            if (retryCount === 0) {
+                console.log('图片尚未完全加载，等待加载完成');
+            }
+            img.onload = () => {
+                this.updateSVGOverlay(pageIndex, blocks);
+            };
+            return;
+        }
+
+        // 获取图片的实际显示尺寸和位置
+        const imgRect = img.getBoundingClientRect();
+        const viewportRect = img.parentElement.getBoundingClientRect();
+        
+        // 计算缩放比例 - 基于图片的实际显示尺寸和原始尺寸
+        const displayWidth = imgRect.width;
+        const displayHeight = imgRect.height;
+        const naturalWidth = img.naturalWidth;
+        const naturalHeight = img.naturalHeight;
+
+        const scaleX = displayWidth / naturalWidth;
+        const scaleY = displayHeight / naturalHeight;
+
+        // 计算图片在视口中的偏移量
+        const offsetX = imgRect.left - viewportRect.left;
+        const offsetY = imgRect.top - viewportRect.top;
+
+        console.log(`OCR坐标计算:
+            图片显示尺寸=${displayWidth}x${displayHeight}
+            原始尺寸=${naturalWidth}x${naturalHeight}
+            缩放比例=${scaleX.toFixed(3)}x${scaleY.toFixed(3)}
+            相对偏移=(${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`);
+
+        // 创建SVG元素 - 使用视口尺寸
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("viewBox", `0 0 ${viewportRect.width} ${viewportRect.height}`);
+        svg.setAttribute("preserveAspectRatio", "none");
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
+        svg.style.pointerEvents = 'none';
+
+        // 添加OCR文本块
+        blocks.forEach((block, index) => {
+            const [x1, y1, x2, y2] = block.box;
+            
+            // 应用缩放比例和偏移量
+            const scaledX1 = x1 * scaleX + offsetX;
+            const scaledY1 = y1 * scaleY + offsetY;
+            const scaledWidth = (x2 - x1) * scaleX;
+            const scaledHeight = (y2 - y1) * scaleY;
+
+            // 边界检查
+            if (scaledX1 < 0 || scaledY1 < 0 || 
+                scaledX1 + scaledWidth > viewportRect.width || 
+                scaledY1 + scaledHeight > viewportRect.height) {
+                console.warn(`OCR块 ${index} 超出边界，已调整`);
+            }
+
+            const rect = document.createElementNS(svgNS, "rect");
+            
+            rect.setAttribute("x", scaledX1);
+            rect.setAttribute("y", scaledY1);
+            rect.setAttribute("width", scaledWidth);
+            rect.setAttribute("height", scaledHeight);
+            rect.setAttribute("class", "ocr-rect");
+            rect.setAttribute("data-block-index", index);
+            rect.setAttribute("data-text", block.lines.join(' '));
+
+            // 确保样式正确应用
+            rect.style.fill = 'rgba(255, 193, 7, 0.3)';
+            rect.style.stroke = 'rgba(255, 193, 7, 0.8)';
+            rect.style.strokeWidth = '2';
+            rect.style.pointerEvents = 'all';
+            rect.style.cursor = 'pointer';
+
+            if (highlightEnabled) {
+                rect.classList.add('highlighted');
+            }
+
+            // 添加点击和触摸事件
+            const handleOCRTap = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log(`OCR区域点击: ${block.lines.join(' ')}`);
+                this.handleOCRBlockClick(block);
+            };
+
+            rect.addEventListener('click', handleOCRTap);
+            rect.addEventListener('touchstart', handleOCRTap, { passive: false });
+
+            // 添加悬停效果（仅PC端）
+            if (window.matchMedia("(hover: hover)").matches) {
+                rect.addEventListener('mouseenter', (e) => {
+                    this.showOCRTooltip(e, block.lines.join(' '));
+                });
+                
+                rect.addEventListener('mouseleave', () => {
+                    this.hideOCRTooltip();
+                });
+            }
+
+            svg.appendChild(rect);
+        });
+
+        svgOverlay.innerHTML = '';
+        svgOverlay.appendChild(svg);
+        
+        console.log(`OCR覆盖层已更新，共 ${blocks.length} 个文本块`);
+    }
+
+    /**
+     * 强制重绘SVG覆盖层（移动端专用）
+     */
+    forceRedrawSVGOverlay() {
+        if (!currentMokuroData) return;
+        
+        const currentPage = currentMokuroData.pages[currentPageIndex];
+        if (!currentPage) return;
+        
+        setTimeout(() => {
+            this.updateSVGOverlay(currentPageIndex, currentPage.blocks || []);
+        }, 300);
+    }
+
+    /**
+     * 处理OCR文本块点击
+     */
+    handleOCRBlockClick(blockData) {
+        const textContent = blockData.lines.join(' ');
+        console.log('OCR文本内容:', textContent);
+        
+        if (window.comicReaderApp && window.comicReaderApp.mokuroParser) {
+            window.comicReaderApp.mokuroParser.openDictionaryWithOCRText(textContent, blockData);
+        }
+    }
+
+    /**
+     * 显示OCR工具提示
+     */
+    showOCRTooltip(e, text) {
+        if (!window.matchMedia("(hover: hover)").matches) {
+            return;
+        }
+        
+        this.hideOCRTooltip();
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'mokuro-tooltip';
+        tooltip.innerHTML = `
+            <div class="tooltip-content">
+                <strong>识别文本:</strong> ${text}
+                <br><small>点击打开词典查询</small>
+            </div>
+        `;
+        
+        tooltip.style.position = 'fixed';
+        tooltip.style.background = 'rgba(0, 0, 0, 0.8)';
+        tooltip.style.color = 'white';
+        tooltip.style.padding = '8px 12px';
+        tooltip.style.borderRadius = '4px';
+        tooltip.style.zIndex = '10000';
+        tooltip.style.maxWidth = '300px';
+        tooltip.style.fontSize = '14px';
+        tooltip.style.pointerEvents = 'none';
+        
+        document.body.appendChild(tooltip);
+        
+        const x = e.clientX + 10;
+        const y = e.clientY + 10;
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+        
+        e.target.dataset.currentTooltip = tooltip;
+    }
+
+    /**
+     * 隐藏OCR工具提示
+     */
+    hideOCRTooltip() {
+        const existingTooltip = document.querySelector('.mokuro-tooltip');
+        if (existingTooltip) {
+            existingTooltip.remove();
+        }
+    }
+
+    /**
+     * 更新所有OCR块的高亮状态
+     */
+    updateOCRHighlights() {
+        const ocrRects = document.querySelectorAll('.ocr-rect');
+        ocrRects.forEach(rect => {
+            if (highlightEnabled) {
+                rect.classList.add('highlighted');
+            } else {
+                rect.classList.remove('highlighted');
+            }
         });
     }
 
     /**
      * 清理创建的Object URL，释放内存
-     * @param {Array} imageDataArray - 图片数据数组
      */
-    cleanup(imageDataArray) {
-        if (imageDataArray) {
-            imageDataArray.forEach(imageData => {
+    cleanup() {
+        if (currentImages) {
+            currentImages.forEach(imageData => {
                 if (imageData.objectURL) {
                     URL.revokeObjectURL(imageData.objectURL);
                     console.log('清理图片资源:', imageData.filename);
@@ -172,26 +636,12 @@ class ZipProcessor {
     }
 }
 
-// 在MokuroParser类中添加词典功能支持
+// MokuroParser类
 class MokuroParser {
     constructor() {
         this.currentMokuroData = null;
         this.textBlocks = new Map(); // 存储文本块数据
         console.log('MokuroParser初始化完成');
-    }
-
-    /**
-     * 处理文本块点击事件 - 修改为打开词典面板
-     */
-    handleBlockClick(e, blockData) {
-        e.stopPropagation();
-        
-        // 获取OCR文本内容
-        const textContent = blockData.lines.join(' ');
-        console.log('OCR文本内容:', textContent);
-        
-        // 打开词典面板并显示OCR内容
-        this.openDictionaryWithOCRText(textContent, blockData);
     }
 
     /**
@@ -231,14 +681,9 @@ class MokuroParser {
         }
         // 日语文本显示分词
         else if (currentLanguageMode === 'japanese' && ocrText.trim()) {
-            if (window.tokenizer) {
-                dictionaryPanel.showJapaneseWordSegmentation(ocrText);
-            } else {
-                // 如果没有分词器，直接显示文本
-                dictionaryPanel.panelSearchInput.value = ocrText;
-                dictionaryPanel.panelDictionaryResult.innerHTML = 
-                    '<div class="info">点击句子中的单词进行查询，或使用搜索框手动输入</div>';
-            }
+            dictionaryPanel.panelSearchInput.value = ocrText;
+            dictionaryPanel.panelDictionaryResult.innerHTML = 
+                '<div class="info">点击句子中的单词进行查询，或使用搜索框手动输入</div>';
         }
     }
 
@@ -290,7 +735,6 @@ class MokuroParser {
         }, 5000);
     }
 
-    // 其他原有方法保持不变...
     async parseMokuroFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -305,8 +749,13 @@ class MokuroParser {
                     }
                     
                     this.currentMokuroData = mokuroData;
+                    currentMokuroData = mokuroData; // 设置全局变量
                     this.processTextBlocks(mokuroData);
                     console.log('Mokuro文件解析成功');
+                    
+                    // 创建所有页面的SVG overlay
+                    this.createSVGOverlaysForAllPages(mokuroData);
+                    
                     resolve(mokuroData);
                 } catch (error) {
                     console.error('Mokuro文件解析失败:', error);
@@ -324,9 +773,9 @@ class MokuroParser {
 
     validateMokuroStructure(data) {
         return data && 
-               data.version && 
-               data.title && 
-               Array.isArray(data.pages);
+                data.version && 
+                data.title && 
+                Array.isArray(data.pages);
     }
 
     processTextBlocks(mokuroData) {
@@ -338,196 +787,85 @@ class MokuroParser {
         });
     }
 
-    createTextLayerForImage(imagePath, imageElement, options = {}) {
-        const blocks = this.textBlocks.get(imagePath);
-        if (!blocks || !imageElement.parentElement) {
-            return null;
-        }
-
-        const defaultOptions = {
-            showBoundingBox: false, // 默认不显示边界框，更美观
-            enableHover: true,
-            enableClick: true,
-            hoverDisplay: 'tooltip'
-        };
-        const config = { ...defaultOptions, ...options };
-
-        // 创建文本层容器
-        const textLayer = document.createElement('div');
-        textLayer.className = 'mokuro-text-layer';
-        
-        const imgRect = imageElement.getBoundingClientRect();
-        const scaleX = imgRect.width / imageElement.naturalWidth;
-        const scaleY = imgRect.height / imageElement.naturalHeight;
-
-        textLayer.style.position = 'absolute';
-        textLayer.style.top = '0';
-        textLayer.style.left = '0';
-        textLayer.style.width = '100%';
-        textLayer.style.height = '100%';
-        textLayer.style.pointerEvents = 'none';
-
-        // 为每个文本块创建元素
-        blocks.forEach((block, index) => {
-            const blockElement = this.createTextBlockElement(block, scaleX, scaleY, config, index);
-            if (blockElement) {
-                textLayer.appendChild(blockElement);
-            }
-        });
-
-        // 将文本层添加到图片容器中
-        const container = imageElement.parentElement;
-        container.style.position = 'relative';
-        container.appendChild(textLayer);
-
-        return textLayer;
-    }
-
-    createTextBlockElement(block, scaleX, scaleY, config, index) {
-        const [x1, y1, x2, y2] = block.box;
-        
-        const blockElement = document.createElement('div');
-        blockElement.className = 'mokuro-text-block';
-        blockElement.dataset.blockIndex = index;
-        
-        // 设置文本块位置和尺寸
-        blockElement.style.position = 'absolute';
-        blockElement.style.left = (x1 * scaleX) + 'px';
-        blockElement.style.top = (y1 * scaleY) + 'px';
-        blockElement.style.width = ((x2 - x1) * scaleX) + 'px';
-        blockElement.style.height = ((y2 - y1) * scaleY) + 'px';
-        blockElement.style.pointerEvents = 'auto';
-        blockElement.style.cursor = 'pointer';
-
-        // 可视化的边界框（调试时可开启）
-        if (config.showBoundingBox) {
-            blockElement.style.border = '1px solid rgba(255, 0, 0, 0.3)';
-            blockElement.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
-        } else {
-            // 透明背景，只有悬停时显示
-            blockElement.style.backgroundColor = 'transparent';
-            blockElement.style.transition = 'background-color 0.2s ease';
-        }
-
-        // 存储块数据供交互使用
-        blockElement.dataset.blockData = JSON.stringify(block);
-
-        // 添加交互事件
-        this.attachBlockEvents(blockElement, block, config);
-
-        return blockElement;
-    }
-
-    attachBlockEvents(blockElement, blockData, config) {
-        if (config.enableHover) {
-            blockElement.addEventListener('mouseenter', (e) => {
-                this.handleBlockHover(e, blockData, config);
-                // 悬停时显示背景
-                e.target.style.backgroundColor = 'rgba(255, 255, 0, 0.2)';
-            });
-            
-            blockElement.addEventListener('mouseleave', (e) => {
-                this.handleBlockHoverEnd(e, config);
-                // 离开时恢复透明
-                if (!config.showBoundingBox) {
-                    e.target.style.backgroundColor = 'transparent';
-                }
-            });
-        }
-
-        if (config.enableClick) {
-            blockElement.addEventListener('click', (e) => {
-                this.handleBlockClick(e, blockData);
-            });
-        }
-    }
-
-    handleBlockHover(e, blockData, config) {
-        const textContent = blockData.lines.join(' ');
-        
-        if (config.hoverDisplay === 'tooltip') {
-            this.showTooltip(e, textContent, blockData);
-        }
-    }
-
-    showTooltip(e, text, blockData) {
-        this.removeExistingTooltip();
-        
-        const tooltip = document.createElement('div');
-        tooltip.className = 'mokuro-tooltip';
-        tooltip.innerHTML = `
-            <div class="tooltip-content">
-                <strong>识别文本:</strong> ${text}
-                <br><small>点击打开词典查询</small>
-            </div>
-        `;
-        
-        tooltip.style.position = 'fixed';
-        tooltip.style.background = 'rgba(0, 0, 0, 0.8)';
-        tooltip.style.color = 'white';
-        tooltip.style.padding = '8px 12px';
-        tooltip.style.borderRadius = '4px';
-        tooltip.style.zIndex = '10000';
-        tooltip.style.maxWidth = '300px';
-        tooltip.style.fontSize = '14px';
-        tooltip.style.pointerEvents = 'none';
-        
-        document.body.appendChild(tooltip);
-        
-        // 定位工具提示
-        const x = e.clientX + 10;
-        const y = e.clientY + 10;
-        tooltip.style.left = x + 'px';
-        tooltip.style.top = y + 'px';
-        
-        e.target.dataset.currentTooltip = 'true';
-    }
-
-    handleBlockHoverEnd(e, config) {
-        if (config.hoverDisplay === 'tooltip') {
-            this.removeExistingTooltip();
-        }
-    }
-
-    removeExistingTooltip() {
-        const existingTooltip = document.querySelector('.mokuro-tooltip');
-        if (existingTooltip) {
-            existingTooltip.remove();
-        }
-    }
-
-    createAllTextLayers(mokuroData, options = {}) {
+    createSVGOverlaysForAllPages(mokuroData) {
         if (!mokuroData || !mokuroData.pages) {
             console.warn('没有可用的Mokuro数据');
             return;
         }
 
-        mokuroData.pages.forEach(page => {
+        console.log(`为 ${mokuroData.pages.length} 个页面创建SVG overlay`);
+
+        // 只为当前页面和前后几页创建SVG，避免一次性创建太多
+        const visiblePages = this.getVisiblePageRange(mokuroData.pages.length);
+        
+        visiblePages.forEach(pageIndex => {
+            const page = mokuroData.pages[pageIndex];
             const imageElement = this.findImageElementByPath(page.img_path);
-            if (imageElement) {
-                this.createTextLayerForImage(page.img_path, imageElement, options);
+            if (imageElement && window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                // 延迟创建，确保图片已经加载
+                setTimeout(() => {
+                    window.comicReaderApp.zipProcessor.updateSVGOverlay(pageIndex, page.blocks || []);
+                }, pageIndex * 50); // 减少延迟时间
             }
         });
     }
 
+    /**
+     * 获取需要创建SVG的页面范围（当前页和前后2页）
+     */
+    getVisiblePageRange(totalPages) {
+        const range = [];
+        const start = Math.max(0, currentPageIndex - 2);
+        const end = Math.min(totalPages - 1, currentPageIndex + 2);
+        
+        for (let i = start; i <= end; i++) {
+            range.push(i);
+        }
+        
+        // 确保第一页和最后一页也被包含
+        if (!range.includes(0)) range.unshift(0);
+        if (!range.includes(totalPages - 1)) range.push(totalPages - 1);
+        
+        return range;
+    }
+
     findImageElementByPath(imagePath) {
-        const images = document.querySelectorAll('.comic-page img');
+        const images = document.querySelectorAll('.page-wrapper img');
         for (const img of images) {
-            if (img.src.includes(imagePath) || img.alt.includes(imagePath)) {
+            // 简化匹配逻辑，只检查文件名
+            const fileName = imagePath.split('/').pop() || imagePath;
+            if (img.src.includes(fileName) || img.alt.includes(fileName)) {
                 return img;
             }
         }
         return null;
     }
 
+    getPageIndexByImagePath(imagePath) {
+        const pages = document.querySelectorAll('.page-wrapper');
+        const fileName = imagePath.split('/').pop() || imagePath;
+        
+        for (let i = 0; i < pages.length; i++) {
+            if (pages[i].dataset.filename.includes(fileName)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 更新所有文本块的高亮状态
+     */
+    updateTextBlockHighlights() {
+        if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+            window.comicReaderApp.zipProcessor.updateOCRHighlights();
+        }
+    }
+
     cleanup() {
-        this.removeExistingTooltip();
-        
-        const textLayers = document.querySelectorAll('.mokuro-text-layer');
-        textLayers.forEach(layer => layer.remove());
-        
         this.textBlocks.clear();
         this.currentMokuroData = null;
+        currentMokuroData = null;
     }
 }
 
@@ -555,11 +893,17 @@ class DictionaryPanel {
 
     initEventListeners() {
         // 关闭面板
-        closePanelBtn.addEventListener('click', this.closeDictionaryPanel);
-        panelOverlay.addEventListener('click', this.closeDictionaryPanel);
+        closePanelBtn.addEventListener('click', () => {
+            this.closeDictionaryPanel();
+        });
+        panelOverlay.addEventListener('click', () => {
+            this.closeDictionaryPanel();
+        });
 
         // 搜索功能
-        panelSearchBtn.addEventListener('click', this.handleSearch);
+        panelSearchBtn.addEventListener('click', () => {
+            this.handleSearch();
+        });
         panelSearchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 this.handleSearch();
@@ -574,12 +918,13 @@ class DictionaryPanel {
         });
 
         // 追加词汇
-        appendWordBtn.addEventListener('click', this.handleAppendWord);
+        appendWordBtn.addEventListener('click', () => {
+            this.handleAppendWord();
+        });
     }
 
     // 底部面板功能
     openDictionaryPanel() {
-        panelDictionaryResult.style.display = 'block';
         dictionaryPanel.classList.add('active');
         panelOverlay.classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -590,25 +935,6 @@ class DictionaryPanel {
         dictionaryPanel.classList.remove('active');
         panelOverlay.classList.remove('active');
         document.body.style.overflow = '';
-        
-        // 恢复播放状态（全屏模式）
-        if (window.isFullscreen && window.wasPlayingBeforeDict) {
-            if (window.fullscreenVideoPlayer) {
-                window.fullscreenVideoPlayer.play().catch(()=>{});
-            }
-        }
-        // 恢复播放状态（非全屏模式）
-        else if (window.playerWasPlaying) {
-            if (window.currentMediaType === 'video' && window.videoPlayer && window.videoPlayer.paused) {
-                window.videoPlayer.play();
-            } else if (window.currentMediaType === 'audio' && window.audioElement && window.audioElement.paused) {
-                window.audioElement.play();
-                if (window.audioPlayPauseBtn) {
-                    window.audioPlayPauseBtn.textContent = '⏸';
-                    window.audioPlayPauseBtn.classList.add('active');
-                }
-            }
-        }
 
         // 重置追加词汇状态
         this.resetAppendedWords();
@@ -622,7 +948,7 @@ class DictionaryPanel {
         }
         
         this.openDictionaryPanel();
-        panelDictionaryResult.innerHTML = '<div class="loading">查询中...若无显示,请手动点击搜索按键</div>';
+        panelDictionaryResult.innerHTML = '<div class="loading">查询中...</div>';
         panelSearchInput.value = word;
         
         if (activeTab === 'web-tab') {
@@ -631,7 +957,7 @@ class DictionaryPanel {
         // dictionary-tab 时自动查询
         else if (activeTab === 'dictionary-tab')  {
             try {
-                const apiUrl = `https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(word)}`;
+                const apiUrl = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
                 const response = await fetch(apiUrl);
                 
                 if (!response.ok) {
@@ -651,379 +977,61 @@ class DictionaryPanel {
         }
     }
 
-    // 显示生成结构化英语单词数据html页面转给底部面板显示
+    // 显示单词数据
     displayWordDataInPanel(wordData) {
-        if (!wordData.word || !Array.isArray(wordData.entries)) {
-            panelDictionaryResult.innerHTML = '<div class="error">返回的数据格式不正确</div>';
+        if (!wordData || !Array.isArray(wordData) || wordData.length === 0) {
+            panelDictionaryResult.innerHTML = '<div class="error">未找到单词信息</div>';
             return;
         }
         
+        const entry = wordData[0];
         let html = `
             <div class="word-header">
-                <div class="word-title">${this.escapeHtml(wordData.word)}</div>
+                <div class="word-title">${this.escapeHtml(entry.word)}</div>
             </div>
         `;
         
-        wordData.entries.forEach((entry, entryIndex) => {
-            html += `<div class="entry">`;
-            
-            if (entry.partOfSpeech) {
-                html += `<div class="part-of-speech">${this.escapeHtml(entry.partOfSpeech)}</div>`;
-            }
-            
-            if (Array.isArray(entry.pronunciations) && entry.pronunciations.length > 0) {
-                const filteredPronunciations = entry.pronunciations.filter(p => 
-                    p.tags && p.tags.some(tag => tag === "US" || tag === "UK")
-                ).slice(0, 2);
-                
-                if (filteredPronunciations.length > 0) {
-                    html += `<div class="initial-pronunciations">`;
-                    filteredPronunciations.forEach(pronunciation => {
-                        const type = pronunciation.type ? ` (${pronunciation.type})` : '';
-                        const tags = pronunciation.tags && pronunciation.tags.length > 0 ? 
-                            ` <small>${pronunciation.tags.join(', ')}</small>` : '';
-                        html += `<div class="pronunciation">/${this.escapeHtml(pronunciation.text)}/${type}${tags}</div>`;
-                    });
-                    html += `</div>`;
-                    
-                    if (entry.pronunciations.length > filteredPronunciations.length) {
-                        const allPronunciationsId = `all-pronunciations-${entryIndex}`;
-                        html += `<button class="toggle-button" 
-                                  onclick="toggleSection('${allPronunciationsId}', this, '显示全部发音 (${entry.pronunciations.length})', '隐藏全部发音')">显示全部发音 (${entry.pronunciations.length})</button>`;
-                        html += `<div id="${allPronunciationsId}" class="collapsible-section" style="display: none;">`;
-                        entry.pronunciations.forEach(pronunciation => {
-                            const type = pronunciation.type ? ` (${pronunciation.type})` : '';
-                            const tags = pronunciation.tags && pronunciation.tags.length > 0 ? 
-                                ` <small>${pronunciation.tags.join(', ')}</small>` : '';
-                            html += `<div class="pronunciation">/${this.escapeHtml(pronunciation.text)}/${type}${tags}</div>`;
-                        });
-                        html += `</div>`;
-                    }
+        if (entry.phonetics && entry.phonetics.length > 0) {
+            html += `<div class="phonetics">`;
+            entry.phonetics.forEach(phonetic => {
+                if (phonetic.text) {
+                    html += `<div class="phonetic">/${this.escapeHtml(phonetic.text)}/</div>`;
                 }
-            }
-            
-            if (Array.isArray(entry.senses)) {
-                let senseCounter = 0;
-                
-                const renderSenses = (senses, level = 0, sensePath = '') => {
-                    let sensesHtml = '';
-                    senses.forEach((sense, index) => {
-                        senseCounter++;
-                        const currentSensePath = sensePath ? `${sensePath}-${index}` : `${entryIndex}-${index}`;
-                        
-                        sensesHtml += `<div class="sense" style="margin-left: ${level * 15}px;">`;
-                        
-                        if (sense.definition) {
-                            const number = level === 0 ? `${senseCounter}.` : `${senseCounter}`;
-                            sensesHtml += `<div class="definition"><strong>${number}</strong> ${this.escapeHtml(sense.definition)}</div>`;
-                        }
-                        
-                        if (Array.isArray(sense.tags) && sense.tags.length > 0) {
-                            sensesHtml += `<div style="font-size: 12px; color: #586069; margin-bottom: 5px;">标签: ${sense.tags.map(t => this.escapeHtml(t)).join(', ')}</div>`;
-                        }
-                        
-                        if (Array.isArray(sense.examples) && sense.examples.length > 0) {
-                            const maxInitialExamples = 2;
-                            const initialExamples = sense.examples.slice(0, maxInitialExamples);
-                            const remainingExamples = sense.examples.slice(maxInitialExamples);
-                            
-                            initialExamples.forEach(example => {
-                                sensesHtml += `<div class="example">${this.escapeHtml(example)}</div>`;
-                            });
-                            
-                            if (remainingExamples.length > 0) {
-                                const allExamplesId = `all-examples-${currentSensePath}`;
-                                sensesHtml += `<button class="toggle-button examples-toggle" 
-                                          onclick="toggleSection('${allExamplesId}', this, '显示更多例句 (${sense.examples.length})', '隐藏更多例句')">显示更多例句 (${sense.examples.length})</button>`;
-                                sensesHtml += `<div id="${allExamplesId}" class="collapsible-section" style="display: none;">`;
-                                remainingExamples.forEach(example => {
-                                    sensesHtml += `<div class="example">${this.escapeHtml(example)}</div>`;
-                                });
-                                sensesHtml += `</div>`;
-                            }
-                        }
-                        
-                        if (Array.isArray(sense.quotes)) {
-                            sense.quotes.forEach(quote => {
-                                sensesHtml += `<div class="quote">"${this.escapeHtml(quote.text)}"`;
-                                if (quote.reference) {
-                                    sensesHtml += `<div class="quote-reference">— ${this.escapeHtml(quote.reference)}</div>`;
-                                }
-                                sensesHtml += `</div>`;
-                            });
-                        }
-                        
-                        if (Array.isArray(sense.synonyms) && sense.synonyms.length > 0) {
-                            sensesHtml += `<div class="synonyms"><span>同义词:</span> ${sense.synonyms.map(s => this.escapeHtml(s)).join(', ')}</div>`;
-                        }
-                        if (Array.isArray(sense.antonyms) && sense.antonyms.length > 0) {
-                            sensesHtml += `<div class="antonyms"><span>反义词:</span> ${sense.antonyms.map(a => this.escapeHtml(a)).join(', ')}</div>`;
-                        }
-                        
-                        if (Array.isArray(sense.subsenses) && sense.subsenses.length > 0) {
-                            sensesHtml += renderSenses(sense.subsenses, level + 1, currentSensePath);
-                        }
-                        
-                        sensesHtml += `</div>`;
-                    });
-                    return sensesHtml;
-                };
-                
-                html += renderSenses(entry.senses);
-            }
-            
-            if (Array.isArray(entry.forms) && entry.forms.length > 0) {
-                const maxInitialForms = 2;
-                const initialForms = entry.forms.slice(0, maxInitialForms);
-                const remainingForms = entry.forms.slice(maxInitialForms);
-                
-                html += `<div class="initial-forms" style="margin-top: 15px;"><small><strong>词形变化:</strong> `;
-                const initialFormsHtml = initialForms.map(form => 
-                    `${this.escapeHtml(form.word)}${form.tags && form.tags.length > 0 ? ` (${form.tags.join(', ')})` : ''}`
-                ).join(', ');
-                html += initialFormsHtml;
-                html += `</small></div>`;
-                
-                if (remainingForms.length > 0) {
-                    const allFormsId = `all-forms-${entryIndex}`;
-                    html += `<button class="toggle-button" 
-                              onclick="toggleSection('${allFormsId}', this, '显示全部词形变化 (${entry.forms.length})', '隐藏全部词形变化')">显示全部词形变化 (${entry.forms.length})</button>`;
-                    html += `<div id="${allFormsId}" class="collapsible-section" style="display: none;">`;
-                    const allFormsHtml = entry.forms.map(form => 
-                        `${this.escapeHtml(form.word)}${form.tags && form.tags.length > 0 ? ` (${form.tags.join(', ')})` : ''}`
-                    ).join(', ');
-                    html += allFormsHtml;
-                    html += `</div>`;
-                }
-            }
-            
-            if (Array.isArray(entry.synonyms) && entry.synonyms.length > 0) {
-                html += `<div class="synonyms"><span>同义词:</span> ${entry.synonyms.map(s => this.escapeHtml(s)).join(', ')}</div>`;
-            }
-            if (Array.isArray(entry.antonyms) && entry.antonyms.length > 0) {
-                html += `<div class="antonyms"><span>反义词:</span> ${entry.antonyms.map(a => this.escapeHtml(a)).join(', ')}</div>`;
-            }
-            
-            html += `</div>`;
-        });
-        
-        panelDictionaryResult.innerHTML = html;
-    }
-
-    // 查询日语单词
-    async searchJapaneseWordInPanel(word) {
-        if (!word.trim()) {
-            panelDictionaryResult.innerHTML = '<div class="error">请输入要查询的单词</div>';
-            return;
-        }
-        
-        this.openDictionaryPanel();
-        panelDictionaryResult.innerHTML = '<div class="loading">查询中...若无显示,请手动点击搜索按键</div>';
-        panelSearchInput.value = word;
-        
-        if (activeTab === 'web-tab') {
-            this.loadWebSearch(word);
-        }
-        // dictionary-tab 时自动查询
-        else if (activeTab === 'dictionary-tab')  {
-            try {
-                const apiUrl = `https://freedictionaryapi.com/api/v1/entries/ja/${encodeURIComponent(word)}`;
-                const response = await fetch(apiUrl);
-                
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        throw new Error(`未找到日语单词 "${word}"`);
-                    } else {
-                        throw new Error(`API请求失败: ${response.status}`);
-                    }
-                }
-                
-                const data = await response.json();
-                this.displayJapaneseWordDataInPanel(data);
-            } catch (error) {
-                panelDictionaryResult.innerHTML = `<div class="error">${error.message}</div>`;
-                console.error('查询错误:', error);
-            }
-        }
-    }
-
-    // 显示生成结构化日语单词数据html页面转给底部面板显示
-    displayJapaneseWordDataInPanel(wordData) {
-        if (!wordData.word || !Array.isArray(wordData.entries)) {
-            panelDictionaryResult.innerHTML = '<div class="error">返回的数据格式不正确</div>';
-            return;
-        }
-
-        let html = `
-            <div class="word-header">
-                <div class="word-title">${this.escapeHtml(wordData.word)}</div>
-            </div>
-        `;
-
-        wordData.entries.forEach((entry, entryIndex) => {
-            html += `<div class="entry">`;
-
-            if (entry.partOfSpeech) {
-                html += `<div class="part-of-speech">${this.escapeHtml(entry.partOfSpeech)}</div>`;
-            }
-
-            // 发音处理
-            if (Array.isArray(entry.pronunciations) && entry.pronunciations.length > 0) {
-                const filteredPronunciations = entry.pronunciations.slice(0, 2);
-                if (filteredPronunciations.length > 0) {
-                    html += `<div class="initial-pronunciations">`;
-                    filteredPronunciations.forEach(pronunciation => {
-                        const type = pronunciation.type ? ` (${pronunciation.type})` : '';
-                        html += `<div class="pronunciation">/${this.escapeHtml(pronunciation.text)}/${type}</div>`;
-                    });
-                    html += `</div>`;
-
-                    if (entry.pronunciations.length > filteredPronunciations.length) {
-                        const allPronunciationsId = `all-pronunciations-${entryIndex}`;
-                        html += `<button class="toggle-button" 
-                                  onclick="toggleSection('${allPronunciationsId}', this, '显示全部发音 (${entry.pronunciations.length})', '隐藏全部发音')">显示全部发音 (${entry.pronunciations.length})</button>`;
-                        html += `<div id="${allPronunciationsId}" class="collapsible-section" style="display: none;">`;
-                        entry.pronunciations.forEach(pronunciation => {
-                            const type = pronunciation.type ? ` (${pronunciation.type})` : '';
-                            html += `<div class="pronunciation">/${this.escapeHtml(pronunciation.text)}/${type}</div>`;
-                        });
-                        html += `</div>`;
-                    }
-                }
-            }
-
-            // 释义/例句/同义词/反义词
-            if (Array.isArray(entry.senses)) {
-                let senseCounter = 0;
-
-                const renderSenses = (senses, level = 0, sensePath = '') => {
-                    let sensesHtml = '';
-                    senses.forEach((sense, index) => {
-                        senseCounter++;
-                        const currentSensePath = sensePath ? `${sensePath}-${index}` : `${entryIndex}-${index}`;
-                        sensesHtml += `<div class="sense" style="margin-left: ${level * 15}px;">`;
-
-                        if (sense.definition) {
-                            const number = level === 0 ? `${senseCounter}.` : `${senseCounter}`;
-                            sensesHtml += `<div class="definition"><strong>${number}</strong> ${this.escapeHtml(sense.definition)}</div>`;
-                        }
-
-                        if (Array.isArray(sense.examples) && sense.examples.length > 0) {
-                            const maxInitialExamples = 2;
-                            const initialExamples = sense.examples.slice(0, maxInitialExamples);
-                            const remainingExamples = sense.examples.slice(maxInitialExamples);
-
-                            initialExamples.forEach(example => {
-                                sensesHtml += `<div class="example">${this.escapeHtml(example)}</div>`;
-                            });
-
-                            if (remainingExamples.length > 0) {
-                                const allExamplesId = `all-examples-${currentSensePath}`;
-                                sensesHtml += `<button class="toggle-button examples-toggle" 
-                                          onclick="toggleSection('${allExamplesId}', this, '显示更多例句 (${sense.examples.length})', '隐藏更多例句')">显示更多例句 (${sense.examples.length})</button>`;
-                                sensesHtml += `<div id="${allExamplesId}" class="collapsible-section" style="display: none;">`;
-                                remainingExamples.forEach(example => {
-                                    sensesHtml += `<div class="example">${this.escapeHtml(example)}</div>`;
-                                });
-                                sensesHtml += `</div>`;
-                            }
-                        }
-
-                        if (Array.isArray(sense.subsenses) && sense.subsenses.length > 0) {
-                            sensesHtml += renderSenses(sense.subsenses, level + 1, currentSensePath);
-                        }
-
-                        sensesHtml += `</div>`;
-                    });
-                    return sensesHtml;
-                };
-
-                html += renderSenses(entry.senses);
-            }
-
-            html += `</div>`; // entry 结束
-        });
-
-        panelDictionaryResult.innerHTML = html;
-    }
-
-    // 日语分词显示
-    async showJapaneseWordSegmentation(sentence, currentWord = '') {
-        if (!window.tokenizer) {
-            console.error('分词器未初始化');
-            return [];
-        }
-
-        try {
-            const result = window.tokenizer.tokenize(sentence);
-            const japaneseWords = result.map(item => item.surface_form);
-
-            this.openDictionaryPanel();
-            panelDictionaryResult.innerHTML = '';
-
-            let clickableSentence = '';
-            let lastIndex = 0;
-
-            result.forEach((item, index) => {
-                if (item.word_position > lastIndex) clickableSentence += sentence.substring(lastIndex, item.word_position);
-
-                clickableSentence += `<span class="sentence-word selectable-word" data-word="${item.surface_form}" data-index="${index}">${item.surface_form}</span>`;
-
-                lastIndex = item.word_position + item.surface_form.length;
             });
-
-            if (lastIndex < sentence.length) clickableSentence += sentence.substring(lastIndex);
-
-            originalSentence.innerHTML = clickableSentence;
-            currentOriginalSentence = sentence;
-
-            originalSentence.removeEventListener('click', this.handleSentenceWordClick);
-            originalSentence.addEventListener('click', this.handleSentenceWordClick);
-
-            currentSentence = sentence;
-            currentWordIndex = currentWord ? japaneseWords.indexOf(currentWord) : -1;
-            appendedWords = currentWord ? [currentWord] : [];
-            panelSearchInput.value = currentWord || '';
-
-            if (window.japaneseSegmentationComplete) window.japaneseSegmentationComplete(sentence, japaneseWords);
-
-            return japaneseWords; // 返回分词数组，避免重复 tokenize
-        } catch (error) {
-            console.error('日语分词失败:', error);
-            panelDictionaryResult.innerHTML = `<div class="error">日语分词失败: ${error.message}</div>`;
-            return [];
+            html += `</div>`;
         }
+        
+        if (entry.meanings && entry.meanings.length > 0) {
+            entry.meanings.forEach((meaning, index) => {
+                html += `<div class="meaning">`;
+                html += `<div class="part-of-speech">${this.escapeHtml(meaning.partOfSpeech)}</div>`;
+                
+                if (meaning.definitions && meaning.definitions.length > 0) {
+                    html += `<div class="definitions">`;
+                    meaning.definitions.forEach((def, defIndex) => {
+                        html += `<div class="definition">`;
+                        html += `<div class="def-text">${defIndex + 1}. ${this.escapeHtml(def.definition)}</div>`;
+                        
+                        if (def.example) {
+                            html += `<div class="example">例句: ${this.escapeHtml(def.example)}</div>`;
+                        }
+                        
+                        html += `</div>`;
+                    });
+                    html += `</div>`;
+                }
+                
+                html += `</div>`;
+            });
+        }
+        
+        panelDictionaryResult.innerHTML = html;
     }
 
     // 更新原句显示
-    updateOriginalSentence(sentence, currentWord, currentLanguageMode = 'english', japaneseWords = []) {
+    updateOriginalSentence(sentence, currentWord, currentLanguageMode = 'english') {
         if (currentLanguageMode === 'japanese') {
-            let clickableSentence = '';
-            if (japaneseWords && japaneseWords.length > 0) {
-                let lastIndex = 0;
-                let currentPos = 0;
-                
-                japaneseWords.forEach((word, index) => {
-                    const wordPosition = sentence.indexOf(word, currentPos);
-                    if (wordPosition === -1) return;
-                    
-                    if (wordPosition > currentPos) clickableSentence += sentence.substring(currentPos, wordPosition);
-                    
-                    const isCurrentWord = currentWord && word === currentWord;
-                    const wordClass = isCurrentWord ? 'sentence-word highlight selectable-word' : 'sentence-word selectable-word';
-                    clickableSentence += `<span class="${wordClass}" data-word="${word}" data-index="${index}">${word}</span>`;
-                    
-                    currentPos = wordPosition + word.length;
-                });
-                if (currentPos < sentence.length) clickableSentence += sentence.substring(currentPos);
-            } else {
-                clickableSentence = `<span>${sentence}</span>`;
-            }
-
-            originalSentence.innerHTML = clickableSentence;
-            currentOriginalSentence = sentence;
-            originalSentence.removeEventListener('click', this.handleSentenceWordClick);
-            originalSentence.addEventListener('click', this.handleSentenceWordClick);
+            originalSentence.innerHTML = `<span>${sentence}</span>`;
         } else {
             // 英语及其他空格分词语言
             let clickableSentence = '';
@@ -1052,30 +1060,22 @@ class DictionaryPanel {
             });
 
             originalSentence.innerHTML = clickableSentence;
-            currentOriginalSentence = sentence;
-
-            // 重新绑定点击事件
-            originalSentence.removeEventListener('click', this.handleSentenceWordClick);
-            originalSentence.addEventListener('click', this.handleSentenceWordClick);
-
-            console.log('英语原句更新完成:', { 
-                sentence, 
-                currentWord, 
-                currentWordIndex,
-                appendedWords 
-            });
         }
+
+        currentOriginalSentence = sentence;
+
+        // 重新绑定点击事件
+        originalSentence.removeEventListener('click', this.handleSentenceWordClick);
+        originalSentence.addEventListener('click', this.handleSentenceWordClick);
     }
 
     // 处理字幕进行的单词点击
-    handleSentenceWordClick(e) {
+    handleSentenceWordClick = (e) => {
         const span = e.target.closest('.sentence-word');
         if (!span) return;
 
         const word = span.getAttribute('data-word');
         const index = parseInt(span.getAttribute('data-index'));
-
-        // console.log('点击原句日语分词:', word, '索引:', index);
 
         // 剪贴板功能
         if (clipboardEnabled) {
@@ -1096,11 +1096,7 @@ class DictionaryPanel {
         panelSearchInput.value = word;
 
         // 执行搜索
-        if (currentLanguageMode === 'english') {
-            this.searchWordInPanel(word);
-        } else {
-            this.searchJapaneseWordInPanel(word);
-        }
+        this.searchWordInPanel(word);
     }
 
     // 重置追加词汇和搜索栏
@@ -1122,12 +1118,9 @@ class DictionaryPanel {
             return;
         }
 
-        // console.log('追加前状态 - 索引:', currentWordIndex, '追加词汇:', appendedWords, '句子长度:', sentenceSpans.length);
-
         // 如果没有有效的当前索引，从第一个单词开始
         if (currentWordIndex === -1) {
             currentWordIndex = 0;
-            console.log('重置索引为0');
         } 
 
         // 如果已经是最后一个单词，不再追加
@@ -1138,14 +1131,10 @@ class DictionaryPanel {
         // 否则移动到下一个单词
         else {
             currentWordIndex++;
-            console.log('移动到下一个索引:', currentWordIndex);
         }
 
         const currentSpan = sentenceSpans[currentWordIndex];
         const word = currentSpan.getAttribute('data-word');
-
-        // console.log('追加单词:', word, '位置:', currentWordIndex);
-        
 
         // 更新搜索输入框
         if (currentLanguageMode === 'english' && appendedWords.length > 0) {
@@ -1169,11 +1158,7 @@ class DictionaryPanel {
         });
 
         // 执行搜索
-        if (currentLanguageMode === 'english') {
-            this.searchWordInPanel(panelSearchInput.value);
-        } else {
-            this.searchJapaneseWordInPanel(panelSearchInput.value);
-        }
+        this.searchWordInPanel(panelSearchInput.value);
     }
 
     // 搜索处理
@@ -1184,25 +1169,17 @@ class DictionaryPanel {
             return;
         }
         
-        if (currentLanguageMode === 'english') {
-            this.searchWordInPanel(word);
-        } else {
-            this.searchJapaneseWordInPanel(word);
-        }
+        this.searchWordInPanel(word);
     }
 
     // 加载网页查询
     loadWebSearch(word) {
         if (!word) return;
         
-        if (window.webSearch) {
-            window.webSearch(word);
-        } else {
-            const url = currentLanguageMode === 'japanese' ? 
-                `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=ja` :
-                `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=en`;
-            webSearchFrame.src = url;
-        }
+        const url = currentLanguageMode === 'japanese' ? 
+            `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=ja` :
+            `https://www.youdao.com/result?word=${encodeURIComponent(word)}&lang=en`;
+        webSearchFrame.src = url;
     }
 
     // 标签页切换
@@ -1265,32 +1242,598 @@ class DictionaryPanel {
     }
 }
 
-// 添加这个全局函数让嵌入词典框里的释义收缩内容点击后能够正常展开和收起
-function toggleSection(sectionId, button, showText, hideText) {
-    const section = document.getElementById(sectionId);
-    if (section) {
-        if (section.style.display === 'none') {
-            section.style.display = 'block';
-            button.textContent = hideText;
-        } else {
-            section.style.display = 'none';
-            button.textContent = showText;
+// 视图控制功能
+class ViewController {
+    constructor() {
+        this.initElements();
+        this.initEventListeners();
+        this.initDragAndZoom();
+        console.log('ViewController初始化完成');
+    }
+
+    initElements() {
+        // 获取控制按钮元素
+        this.viewModeButtons = document.querySelectorAll('[data-mode]');
+        this.fitModeButtons = document.querySelectorAll('[data-mode]');
+        this.highlightToggleBtn = document.getElementById('toggle-highlight');
+        this.overlayToggleBtn = document.getElementById('toggle-overlay');
+        this.prevPageBtn = document.getElementById('prev-page');
+        this.nextPageBtn = document.getElementById('next-page');
+        this.zoomInBtn = document.getElementById('zoom-in');
+        this.zoomOutBtn = document.getElementById('zoom-out');
+        this.zoomResetBtn = document.getElementById('zoom-reset');
+        this.zoomLevelSpan = document.getElementById('zoom-level');
+        this.centerViewBtn = document.getElementById('center-view');
+        this.sidebarToggleBtn = document.getElementById('sidebar-toggle');
+        this.sidebarControls = document.getElementById('sidebar-controls');
+        
+        // 侧边栏选项
+        this.readingModeRadios = document.querySelectorAll('input[name="reading-mode"]');
+        this.showPageNumbersCheckbox = document.getElementById('show-page-numbers');
+        this.showOcrBoxesCheckbox = document.getElementById('show-ocr-boxes');
+        this.autoFitImagesCheckbox = document.getElementById('auto-fit-images');
+        
+        // 漫画容器
+        this.comicViewport = document.getElementById('comic-viewport');
+        this.comicContainer = document.getElementById('comic-container');
+        
+        // 移动端控制按钮
+        this.prevMobileBtn = document.getElementById('prev-mobile');
+        this.nextMobileBtn = document.getElementById('next-mobile');
+    }
+
+    initEventListeners() {
+        // 视图模式切换
+        document.querySelectorAll('#view-mode-responsive, #view-mode-fixed').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.setViewMode(e.currentTarget.dataset.mode);
+            });
+        });
+
+        // 适配模式切换
+        document.querySelectorAll('#fit-mode-width, #fit-mode-height, #fit-mode-both').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.setFitMode(e.currentTarget.dataset.mode);
+            });
+        });
+
+        // 高亮切换
+        if (this.highlightToggleBtn) {
+            this.highlightToggleBtn.addEventListener('click', () => {
+                this.toggleHighlight();
+            });
+        }
+
+        // 覆盖层切换
+        if (this.overlayToggleBtn) {
+            this.overlayToggleBtn.addEventListener('click', () => {
+                this.toggleOverlay();
+            });
+        }
+
+        // 页面导航
+        if (this.prevPageBtn) {
+            this.prevPageBtn.addEventListener('click', () => {
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.previousPage();
+                }
+            });
+        }
+
+        if (this.nextPageBtn) {
+            this.nextPageBtn.addEventListener('click', () => {
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.nextPage();
+                }
+            });
+        }
+
+        // 缩放控制
+        if (this.zoomInBtn) {
+            this.zoomInBtn.addEventListener('click', () => {
+                this.zoomIn();
+            });
+        }
+
+        if (this.zoomOutBtn) {
+            this.zoomOutBtn.addEventListener('click', () => {
+                this.zoomOut();
+            });
+        }
+
+        if (this.zoomResetBtn) {
+            this.zoomResetBtn.addEventListener('click', () => {
+                this.zoomReset();
+            });
+        }
+
+        if (this.centerViewBtn) {
+            this.centerViewBtn.addEventListener('click', () => {
+                this.centerView();
+            });
+        }
+
+        // 侧边栏切换
+        if (this.sidebarToggleBtn) {
+            this.sidebarToggleBtn.addEventListener('click', () => {
+                this.toggleSidebar();
+            });
+        }
+
+        // 侧边栏选项
+        if (this.readingModeRadios) {
+            this.readingModeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    this.setReadingMode(e.target.value);
+                });
+            });
+        }
+
+        if (this.showPageNumbersCheckbox) {
+            this.showPageNumbersCheckbox.addEventListener('change', (e) => {
+                this.togglePageNumbers(e.target.checked);
+            });
+        }
+
+        if (this.showOcrBoxesCheckbox) {
+            this.showOcrBoxesCheckbox.addEventListener('change', (e) => {
+                this.toggleOcrBoxes(e.target.checked);
+            });
+        }
+
+        if (this.autoFitImagesCheckbox) {
+            this.autoFitImagesCheckbox.addEventListener('change', (e) => {
+                this.toggleAutoFit(e.target.checked);
+            });
+        }
+
+        // 移动端控制按钮
+        if (this.prevMobileBtn) {
+            this.prevMobileBtn.addEventListener('click', () => {
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.previousPage();
+                }
+            });
+        }
+
+        if (this.nextMobileBtn) {
+            this.nextMobileBtn.addEventListener('click', () => {
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.nextPage();
+                }
+            });
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            this.handleKeyboardShortcuts(e);
+        });
+
+        // 边缘点击区域
+        this.initEdgeClickAreas();
+    }
+
+    /**
+     * 初始化拖拽和缩放功能
+     */
+    initDragAndZoom() {
+        if (!this.comicViewport || !this.comicContainer) return;
+
+        // 鼠标拖拽
+        this.comicViewport.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // 只响应左键
+            
+            isPanning = true;
+            this.comicViewport.classList.add('dragging');
+            startPanX = e.clientX - translateX;
+            startPanY = e.clientY - translateY;
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            
+            translateX = e.clientX - startPanX;
+            translateY = e.clientY - startPanY;
+            this.updateTransform();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isPanning = false;
+            this.comicViewport.classList.remove('dragging');
+        });
+
+        // 触摸拖拽
+        this.comicViewport.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                // 单指触摸 - 拖拽
+                isPanning = true;
+                this.comicViewport.classList.add('dragging');
+                startPanX = e.touches[0].clientX - translateX;
+                startPanY = e.touches[0].clientY - translateY;
+            } else if (e.touches.length === 2) {
+                // 双指触摸 - 缩放
+                isPinching = true;
+                initialPinchDistance = this.getDistance(e.touches[0], e.touches[1]);
+                lastScale = scale;
+            }
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (isPanning && e.touches.length === 1) {
+                // 单指拖拽
+                translateX = e.touches[0].clientX - startPanX;
+                translateY = e.touches[0].clientY - startPanY;
+                this.updateTransform();
+            } else if (isPinching && e.touches.length === 2) {
+                // 双指缩放
+                const currentDistance = this.getDistance(e.touches[0], e.touches[1]);
+                scale = lastScale * (currentDistance / initialPinchDistance);
+                // 限制缩放范围
+                scale = Math.max(0.1, Math.min(5, scale));
+                this.updateTransform();
+            }
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0) {
+                isPanning = false;
+                isPinching = false;
+                this.comicViewport.classList.remove('dragging');
+            }
+        });
+
+        // 滚轮缩放
+        this.comicViewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newScale = Math.max(0.1, Math.min(5, scale * delta));
+            
+            // 计算缩放中心
+            const rect = this.comicViewport.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // 调整位置以保持鼠标位置不变
+            const scaleChange = newScale / scale;
+            translateX = mouseX - (mouseX - translateX) * scaleChange;
+            translateY = mouseY - (mouseY - translateY) * scaleChange;
+            
+            scale = newScale;
+            this.updateTransform();
+        });
+
+        // 设置初始光标
+        this.comicViewport.style.cursor = 'grab';
+    }
+
+    /**
+     * 计算两点间距离
+     */
+    getDistance(touch1, touch2) {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
+     * 更新变换
+     */
+    updateTransform() {
+        this.comicContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    }
+
+    /**
+     * 设置视图模式
+     */
+    setViewMode(mode) {
+        currentViewMode = mode;
+        
+        // 更新按钮状态
+        document.querySelectorAll('#view-mode-responsive, #view-mode-fixed').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        
+        // 重新调整图片大小
+        if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+            setTimeout(() => {
+                window.comicReaderApp.zipProcessor.handleResize();
+            }, 100);
+        }
+        
+        console.log(`切换到${mode === 'responsive' ? '自适应' : '固定'}模式`);
+    }
+
+    /**
+     * 设置适配模式
+     */
+    setFitMode(mode) {
+        fitMode = mode;
+        
+        // 更新按钮状态
+        document.querySelectorAll('#fit-mode-width, #fit-mode-height, #fit-mode-both').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === mode);
+        });
+        
+        // 重新调整图片大小
+        if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+            setTimeout(() => {
+                window.comicReaderApp.zipProcessor.handleResize();
+            }, 100);
+        }
+        
+        console.log(`切换到适配模式: ${mode}`);
+    }
+
+    /**
+     * 切换高亮显示
+     */
+    toggleHighlight() {
+        highlightEnabled = !highlightEnabled;
+        
+        // 更新按钮状态
+        if (this.highlightToggleBtn) {
+            this.highlightToggleBtn.classList.toggle('active', highlightEnabled);
+            this.highlightToggleBtn.dataset.active = highlightEnabled;
+        }
+        
+        // 更新文本块高亮状态
+        if (window.comicReaderApp && window.comicReaderApp.mokuroParser) {
+            window.comicReaderApp.mokuroParser.updateTextBlockHighlights();
+        }
+        
+        console.log(`高亮显示${highlightEnabled ? '开启' : '关闭'}`);
+    }
+
+    /**
+     * 切换覆盖层显示
+     */
+    toggleOverlay() {
+        const svgOverlayContainer = document.getElementById('svg-overlay-container');
+        if (svgOverlayContainer) {
+            const isVisible = svgOverlayContainer.style.display !== 'none';
+            svgOverlayContainer.style.display = isVisible ? 'none' : 'block';
+            
+            // 更新按钮状态
+            if (this.overlayToggleBtn) {
+                this.overlayToggleBtn.classList.toggle('active', !isVisible);
+                this.overlayToggleBtn.dataset.active = !isVisible;
+            }
+            
+            console.log(`覆盖层${isVisible ? '隐藏' : '显示'}`);
         }
     }
-}
 
-// 添加全局检查，确保依赖已加载
-function checkDependencies() {
-    if (typeof ZipProcessor === 'undefined') {
-        throw new Error('ZipProcessor未定义！请检查zip.js是否已正确加载');
+    /**
+     * 初始化边缘点击区域 - 修复移动端触摸问题
+     */
+    initEdgeClickAreas() {
+        const leftEdge = document.getElementById('left-edge');
+        const rightEdge = document.getElementById('right-edge');
+        
+        const handleLeftEdge = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('左边缘触摸');
+            if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                window.comicReaderApp.zipProcessor.previousPage();
+            }
+        };
+
+        const handleRightEdge = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('右边缘触摸');
+            if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                window.comicReaderApp.zipProcessor.nextPage();
+            }
+        };
+        
+        if (leftEdge) {
+            // 移除之前的事件监听器
+            leftEdge.replaceWith(leftEdge.cloneNode(true));
+            const newLeftEdge = document.getElementById('left-edge');
+            
+            // 添加触摸事件
+            newLeftEdge.addEventListener('touchstart', handleLeftEdge, { passive: false });
+            
+            // 同时保留鼠标点击支持
+            newLeftEdge.addEventListener('click', handleLeftEdge);
+        }
+        
+        if (rightEdge) {
+            // 移除之前的事件监听器
+            rightEdge.replaceWith(rightEdge.cloneNode(true));
+            const newRightEdge = document.getElementById('right-edge');
+            
+            // 添加触摸事件
+            newRightEdge.addEventListener('touchstart', handleRightEdge, { passive: false });
+            
+            // 同时保留鼠标点击支持
+            newRightEdge.addEventListener('click', handleRightEdge);
+        }
+        
+        console.log('边缘点击区域初始化完成');
     }
-    if (typeof MokuroParser === 'undefined') {
-        throw new Error('MokuroParser未定义！请检查mokuro.js是否已正确加载');
+
+    /**
+     * 放大
+     */
+    zoomIn() {
+        scale = Math.min(scale + 0.1, 5.0);
+        this.updateTransform();
     }
-    if (typeof JSZip === 'undefined') {
-        throw new Error('JSZip未定义！请检查JSZip库是否已正确加载');
+
+    /**
+     * 缩小
+     */
+    zoomOut() {
+        scale = Math.max(scale - 0.1, 0.1);
+        this.updateTransform();
     }
-    return true;
+
+    /**
+     * 重置缩放
+     */
+    zoomReset() {
+        scale = 1.0;
+        translateX = 0;
+        translateY = 0;
+        this.updateTransform();
+    }
+
+    /**
+     * 居中视图
+     */
+    centerView() {
+        // 居中当前页面
+        const activePage = document.querySelector('.page-wrapper.active');
+        if (activePage) {
+            activePage.classList.add('centered');
+            setTimeout(() => {
+                activePage.classList.remove('centered');
+            }, 300);
+        }
+        this.zoomReset();
+    }
+
+    /**
+     * 切换侧边栏
+     */
+    toggleSidebar() {
+        if (this.sidebarControls) {
+            this.sidebarControls.classList.toggle('active');
+        }
+    }
+
+    /**
+     * 设置阅读模式
+     */
+    setReadingMode(mode) {
+        console.log(`设置阅读模式: ${mode}`);
+        // 这里可以添加阅读模式切换的逻辑
+    }
+
+    /**
+     * 切换页码显示
+     */
+    togglePageNumbers(show) {
+        const pageIndicator = document.getElementById('page-indicator');
+        if (pageIndicator) {
+            pageIndicator.style.display = show ? 'block' : 'none';
+        }
+        console.log(`页码显示${show ? '开启' : '关闭'}`);
+    }
+
+    /**
+     * 切换OCR框显示
+     */
+    toggleOcrBoxes(show) {
+        const svgOverlayContainer = document.getElementById('svg-overlay-container');
+        if (svgOverlayContainer) {
+            svgOverlayContainer.style.display = show ? 'block' : 'none';
+        }
+        console.log(`OCR框显示${show ? '开启' : '关闭'}`);
+    }
+
+    /**
+     * 切换自动适配
+     */
+    toggleAutoFit(enable) {
+        console.log(`自动适配${enable ? '开启' : '关闭'}`);
+        // 这里可以添加自动适配切换的逻辑
+    }
+
+    /**
+     * 处理键盘快捷键
+     */
+    handleKeyboardShortcuts(e) {
+        // 防止在输入框中触发快捷键
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        switch(e.key) {
+            case 'ArrowLeft':
+                // 上一页
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.previousPage();
+                }
+                e.preventDefault();
+                break;
+                
+            case 'ArrowRight':
+                // 下一页
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.nextPage();
+                }
+                e.preventDefault();
+                break;
+                
+            case ' ':
+                // 空格翻页
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.nextPage();
+                }
+                e.preventDefault();
+                break;
+                
+            case '+':
+            case '=':
+                // 放大
+                this.zoomIn();
+                e.preventDefault();
+                break;
+                
+            case '-':
+                // 缩小
+                this.zoomOut();
+                e.preventDefault();
+                break;
+                
+            case '0':
+                // 重置缩放
+                this.zoomReset();
+                e.preventDefault();
+                break;
+                
+            case 'f':
+            case 'F':
+                // 全屏切换
+                this.toggleFullscreen();
+                e.preventDefault();
+                break;
+                
+            case 'r':
+            case 'R':
+                // 重置视图
+                this.zoomReset();
+                if (window.comicReaderApp && window.comicReaderApp.zipProcessor) {
+                    window.comicReaderApp.zipProcessor.showPage(0);
+                }
+                e.preventDefault();
+                break;
+        }
+    }
+
+    /**
+     * 切换全屏
+     */
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`全屏请求失败: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
 }
 
 // ComicReaderApp类 - 主应用文件
@@ -1300,13 +1843,15 @@ class ComicReaderApp {
             console.log('正在初始化ComicReaderApp...');
             
             // 检查依赖
-            checkDependencies();
+            if (typeof JSZip === 'undefined') {
+                throw new Error('JSZip库未加载！请确保在之前引入JSZip');
+            }
             
             // 初始化处理器
             this.zipProcessor = new ZipProcessor();
             this.mokuroParser = new MokuroParser();
+            this.viewController = new ViewController();
             this.dictionaryPanel = new DictionaryPanel();
-            this.currentImages = [];
             
             console.log('ComicReaderApp初始化成功');
             this.initializeEventListeners();
@@ -1377,19 +1922,19 @@ class ComicReaderApp {
 
         try {
             console.log('开始上传ZIP文件:', file.name);
-            const comicViewer = document.getElementById('comic-viewer');
+            const comicContainer = document.getElementById('comic-container');
             
-            if (!comicViewer) {
-                throw new Error('未找到漫画查看器容器');
+            if (!comicContainer) {
+                throw new Error('未找到漫画容器');
             }
 
-            this.currentImages = await this.zipProcessor.processZipFile(file, 
+            const images = await this.zipProcessor.processZipFile(file, 
                 (processed, total) => {
                     console.log(`处理进度: ${processed}/${total}`);
                 }
             );
             
-            this.zipProcessor.displayImages(this.currentImages, comicViewer);
+            this.zipProcessor.displayImages(images, comicContainer);
             console.log('ZIP文件处理完成');
         } catch (error) {
             console.error('ZIP文件处理失败:', error);
@@ -1407,14 +1952,7 @@ class ComicReaderApp {
         try {
             console.log('开始上传Mokuro文件:', file.name);
             const mokuroData = await this.mokuroParser.parseMokuroFile(file);
-            this.mokuroParser.createAllTextLayers(mokuroData, {
-                showBoundingBox: true, // 调试时可设为true
-                enableHover: true,
-                enableClick: true,
-                hoverDisplay: 'tooltip'
-            });
-            
-            console.log('Mokuro文件解析成功', mokuroData);
+            console.log('Mokuro文件处理完成');
         } catch (error) {
             console.error('Mokuro文件解析失败:', error);
             this.showError('Mokuro文件解析失败: ' + error.message);
@@ -1423,7 +1961,7 @@ class ComicReaderApp {
 
     // 清理资源
     destroy() {
-        this.zipProcessor.cleanup(this.currentImages);
+        this.zipProcessor.cleanup();
         this.mokuroParser.cleanup();
         console.log('ComicReaderApp已清理');
     }
@@ -1437,7 +1975,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('漫画阅读器应用初始化完成');
     } catch (error) {
         console.error('应用初始化失败:', error);
-        // 显示错误信息给用户
         const errorMessage = document.createElement('div');
         errorMessage.style.cssText = `
             color: red;
@@ -1454,4 +1991,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-console.log('漫画阅读器JS文件合并完成（包含词典功能）');
+console.log('漫画阅读器响应式版本加载完成');
