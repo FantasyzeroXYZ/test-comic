@@ -1411,7 +1411,7 @@ class DictionaryPanel {
         } finally {
             // 恢复按钮状态
             if (this.panelAnkiBtn) {
-                this.panelAnkiBtn.innerHTML = '<img src="./assets/icons8-anki-24.png" alt="Anki" class="anki-icon"> 添加到Anki';
+                this.panelAnkiBtn.innerHTML = '<img src="./assets/icons8-anki-24.png" alt="Anki" class="anki-icon">';
                 this.panelAnkiBtn.disabled = false;
             }
         }

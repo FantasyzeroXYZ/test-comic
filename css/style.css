@@ -29,17 +29,18 @@ body {
     flex-direction: column;
 }
 
-/* 顶部控制栏 */
+/* 顶部控制栏 - 改为不透明并调整高度 */
 .main-header {
-    background: rgba(26, 26, 46, 0.95);
-    backdrop-filter: blur(10px);
+    background: var(--background-color);
     border-bottom: 1px solid var(--border-color);
-    padding: 8px 15px;
+    padding: 6px 12px; /* 减少内边距让顶部栏更紧凑 */
     position: sticky;
     top: 0;
     z-index: 1000;
     flex-shrink: 0;
-    min-height: auto;
+    min-height: 50px; /* 固定高度 */
+    display: flex;
+    align-items: center;
 }
 
 .header-content {
@@ -48,23 +49,26 @@ body {
     justify-content: space-between;
     max-width: 1400px;
     margin: 0 auto;
-    gap: 15px;
+    gap: 8px; /* 减少间距让按键更紧凑 */
+    width: 100%;
 }
 
 .logo {
-    font-size: 1.3rem;
+    font-size: 1.2rem; /* 稍微减小字体大小 */
     font-weight: 700;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
-/* 文件上传区域 */
+/* 文件上传区域 - 调整间距 */
 .file-upload-section {
     display: flex;
-    gap: 8px;
+    gap: 6px; /* 减少间距 */
     flex-wrap: nowrap;
+    align-items: center;
 }
 
 .upload-group {
@@ -75,15 +79,15 @@ body {
 .upload-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
+    gap: 4px; /* 减少图标和文字间距 */
+    padding: 6px 10px; /* 减少内边距 */
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     color: var(--text-primary);
     cursor: pointer;
     transition: var(--transition);
-    font-size: 13px;
+    font-size: 12px; /* 减小字体大小 */
     white-space: nowrap;
 }
 
@@ -98,19 +102,19 @@ body {
     opacity: 0;
 }
 
-/* 顶部设置按钮样式 */
+/* 顶部设置按钮样式 - 调整间距 */
 #sidebar-toggle-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
+    gap: 4px; /* 减少间距 */
+    padding: 6px 10px; /* 减少内边距 */
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     color: var(--text-primary);
     cursor: pointer;
     transition: var(--transition);
-    font-size: 13px;
+    font-size: 12px; /* 减小字体大小 */
     white-space: nowrap;
 }
 
@@ -119,15 +123,14 @@ body {
     border-color: var(--primary-color);
 }
 
-/* 侧边控制面板 */
+/* 侧边控制面板 - 调整位置消除缝隙 */
 .sidebar-controls {
     position: fixed;
-    top: 0;
+    top: 50px; /* 与顶部栏高度一致，消除缝隙 */
     right: 0;
     width: 380px;
-    height: 100vh;
-    background: rgba(26, 26, 46, 0.95);
-    backdrop-filter: blur(10px);
+    height: calc(100vh - 50px); /* 减去顶部栏高度 */
+    background: var(--surface-color);
     border-left: 1px solid var(--border-color);
     z-index: 900;
     transition: var(--transition);
@@ -530,7 +533,7 @@ body {
     margin: 0;
     overflow: hidden;
     position: relative;
-    height: calc(100vh - 60px);
+    height: calc(100vh - 50px); /* 调整为减去新的顶部栏高度 */
 }
 
 /* 漫画视口 */
@@ -698,10 +701,10 @@ body {
     border-left: 1px dashed rgba(255, 255, 255, 0.3);
 }
 
-/* 页面指示器 */
+/* 页面指示器 - 调整位置到底端之上 */
 .page-indicator {
     position: absolute;
-    bottom: 20px;
+    bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.7);
@@ -713,7 +716,7 @@ body {
     backdrop-filter: blur(10px);
 }
 
-/* 移动端控制按钮 */
+/* 移动端控制按钮 - 隐藏换页按键 */
 .mobile-controls {
     position: absolute;
     bottom: 80px;
@@ -752,8 +755,7 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(26, 26, 46, 0.98);
-    backdrop-filter: blur(20px);
+    background: var(--surface-color);
     border-top: 1px solid var(--border-color);
     transform: translateY(100%);
     transition: var(--transition);
@@ -1290,30 +1292,33 @@ body {
 @media (max-width: 1200px) {
     .header-content {
         flex-wrap: wrap;
-        gap: 12px;
+        gap: 8px; /* 保持紧凑间距 */
     }
 }
 
 @media (max-width: 768px) {
     .main-header {
-        padding: 6px 12px;
+        padding: 4px 8px; /* 移动端更紧凑 */
+        min-height: 45px; /* 移动端稍小的高度 */
     }
     
     .file-upload-section {
         flex-direction: row;
-        gap: 6px;
+        gap: 4px; /* 移动端更紧凑 */
         flex-wrap: wrap;
         justify-content: center;
     }
 
     .upload-label {
-        padding: 6px 10px;
-        font-size: 12px;
+        padding: 5px 8px; /* 移动端更紧凑 */
+        font-size: 11px; /* 移动端更小字体 */
+        gap: 3px;
     }
 
     #sidebar-toggle-header {
-        padding: 6px 10px;
-        font-size: 12px;
+        padding: 5px 8px; /* 移动端更紧凑 */
+        font-size: 11px; /* 移动端更小字体 */
+        gap: 3px;
     }
     
     #sidebar-toggle-header span {
@@ -1326,6 +1331,8 @@ body {
 
     .sidebar-controls {
         width: 100%;
+        top: 45px; /* 与移动端顶部栏高度一致 */
+        height: calc(100vh - 45px);
     }
 
     .group-header {
@@ -1345,9 +1352,9 @@ body {
         margin-bottom: 6px;
     }
 
-    /* 移动端显示控制按钮 */
+    /* 移动端显示控制按钮 - 保持隐藏 */
     .mobile-controls {
-        display: flex;
+        display: none;
     }
 
     /* 移动端边缘点击区域调整 */
@@ -1363,7 +1370,7 @@ body {
     }
 
     .page-indicator {
-        bottom: 100px;
+        bottom: 60px;
     }
 
     .page-wrapper.active {
@@ -1445,7 +1452,7 @@ body {
 @media (max-width: 480px) {
     .header-content {
         flex-direction: row;
-        gap: 8px;
+        gap: 6px; /* 超小屏幕更紧凑 */
     }
     
     .logo {
@@ -1457,6 +1464,7 @@ body {
     .file-upload-section {
         width: 100%;
         justify-content: space-between;
+        gap: 3px;
     }
 
     #sidebar-toggle-header {
@@ -1468,7 +1476,9 @@ body {
     .upload-label {
         flex: 1;
         justify-content: center;
-        min-width: 120px;
+        min-width: 110px; /* 稍小的最小宽度 */
+        padding: 4px 6px; /* 超小屏幕更紧凑 */
+        font-size: 10px;
     }
 
     .sidebar-controls {
