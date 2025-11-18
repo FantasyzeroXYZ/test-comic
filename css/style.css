@@ -33,12 +33,12 @@ body {
 .main-header {
     background: var(--background-color);
     border-bottom: 1px solid var(--border-color);
-    padding: 6px 12px; /* 减少内边距让顶部栏更紧凑 */
+    padding: 6px 12px;
     position: sticky;
     top: 0;
     z-index: 1000;
     flex-shrink: 0;
-    min-height: 50px; /* 固定高度 */
+    min-height: 50px;
     display: flex;
     align-items: center;
 }
@@ -49,12 +49,12 @@ body {
     justify-content: space-between;
     max-width: 1400px;
     margin: 0 auto;
-    gap: 8px; /* 减少间距让按键更紧凑 */
+    gap: 8px;
     width: 100%;
 }
 
 .logo {
-    font-size: 1.2rem; /* 稍微减小字体大小 */
+    font-size: 1.2rem;
     font-weight: 700;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     -webkit-background-clip: text;
@@ -66,9 +66,10 @@ body {
 /* 文件上传区域 - 调整间距 */
 .file-upload-section {
     display: flex;
-    gap: 6px; /* 减少间距 */
+    gap: 6px;
     flex-wrap: nowrap;
     align-items: center;
+    margin-left: auto; /* 确保靠右对齐 */
 }
 
 .upload-group {
@@ -79,16 +80,18 @@ body {
 .upload-label {
     display: flex;
     align-items: center;
-    gap: 4px; /* 减少图标和文字间距 */
-    padding: 6px 10px; /* 减少内边距 */
+    justify-content: center; /* 图标居中 */
+    padding: 8px; /* 正方形按钮 */
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     color: var(--text-primary);
     cursor: pointer;
     transition: var(--transition);
-    font-size: 12px; /* 减小字体大小 */
+    font-size: 12px;
     white-space: nowrap;
+    width: 36px; /* 固定宽度 */
+    height: 36px; /* 固定高度 */
 }
 
 .upload-label:hover {
@@ -102,20 +105,22 @@ body {
     opacity: 0;
 }
 
-/* 顶部设置按钮样式 - 调整间距 */
+/* 顶部设置按钮样式 */
 #sidebar-toggle-header {
     display: flex;
     align-items: center;
-    gap: 4px; /* 减少间距 */
-    padding: 6px 10px; /* 减少内边距 */
+    justify-content: center;
+    padding: 8px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
     color: var(--text-primary);
     cursor: pointer;
     transition: var(--transition);
-    font-size: 12px; /* 减小字体大小 */
+    font-size: 12px;
     white-space: nowrap;
+    width: 36px;
+    height: 36px;
 }
 
 #sidebar-toggle-header:hover {
@@ -126,10 +131,10 @@ body {
 /* 侧边控制面板 - 调整位置消除缝隙 */
 .sidebar-controls {
     position: fixed;
-    top: 50px; /* 与顶部栏高度一致，消除缝隙 */
+    top: 50px;
     right: 0;
     width: 380px;
-    height: calc(100vh - 50px); /* 减去顶部栏高度 */
+    height: calc(100vh - 50px);
     background: var(--surface-color);
     border-left: 1px solid var(--border-color);
     z-index: 900;
@@ -533,7 +538,7 @@ body {
     margin: 0;
     overflow: hidden;
     position: relative;
-    height: calc(100vh - 50px); /* 调整为减去新的顶部栏高度 */
+    height: calc(100vh - 50px);
 }
 
 /* 漫画视口 */
@@ -701,7 +706,7 @@ body {
     border-left: 1px dashed rgba(255, 255, 255, 0.3);
 }
 
-/* 页面指示器 - 调整位置到底端之上 */
+/* 页面指示器 */
 .page-indicator {
     position: absolute;
     bottom: 80px;
@@ -1288,50 +1293,50 @@ body {
     text-align: center;
 }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-    .header-content {
-        flex-wrap: wrap;
-        gap: 8px; /* 保持紧凑间距 */
-    }
-}
-
+/* 响应式设计 - 修复移动端布局 */
 @media (max-width: 768px) {
     .main-header {
-        padding: 4px 8px; /* 移动端更紧凑 */
-        min-height: 45px; /* 移动端稍小的高度 */
+        padding: 4px 8px;
+        min-height: 45px;
+    }
+    
+    .header-content {
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 4px;
+    }
+    
+    .logo {
+        font-size: 1rem;
+        flex-shrink: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .file-upload-section {
-        flex-direction: row;
-        gap: 4px; /* 移动端更紧凑 */
-        flex-wrap: wrap;
-        justify-content: center;
+        gap: 3px;
+        margin-left: auto;
+        flex-shrink: 0;
     }
-
+    
     .upload-label {
-        padding: 5px 8px; /* 移动端更紧凑 */
-        font-size: 11px; /* 移动端更小字体 */
-        gap: 3px;
+        width: 32px;
+        height: 32px;
+        padding: 6px;
+        font-size: 11px;
     }
-
+    
     #sidebar-toggle-header {
-        padding: 5px 8px; /* 移动端更紧凑 */
-        font-size: 11px; /* 移动端更小字体 */
-        gap: 3px;
+        width: 32px;
+        height: 32px;
+        padding: 6px;
+        font-size: 11px;
     }
     
-    #sidebar-toggle-header span {
-        display: none;
-    }
-    
-    #sidebar-toggle-header i {
-        margin-right: 0;
-    }
-
     .sidebar-controls {
         width: 100%;
-        top: 45px; /* 与移动端顶部栏高度一致 */
+        top: 45px;
         height: calc(100vh - 45px);
     }
 
@@ -1352,12 +1357,10 @@ body {
         margin-bottom: 6px;
     }
 
-    /* 移动端显示控制按钮 - 保持隐藏 */
     .mobile-controls {
         display: none;
     }
 
-    /* 移动端边缘点击区域调整 */
     .edge-area {
         width: 30px;
         opacity: 0.15;
@@ -1373,34 +1376,6 @@ body {
         bottom: 60px;
     }
 
-    .page-wrapper.active {
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        width: 100% !important;
-        height: 100% !important;
-        position: relative !important;
-    }
-
-    .svg-overlay {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        pointer-events: none !important;
-    }
-
-    /* 移动端OCR方框优化 */
-    .ocr-rect {
-        stroke-width: 1 !important;
-    }
-    
-    .ocr-rect.highlighted {
-        stroke-width: 2 !important;
-    }
-
-    /* 词典面板移动端优化 */
     .dictionary-panel {
         max-height: 80vh;
     }
@@ -1451,33 +1426,29 @@ body {
 
 @media (max-width: 480px) {
     .header-content {
-        flex-direction: row;
-        gap: 6px; /* 超小屏幕更紧凑 */
+        gap: 2px;
     }
     
     .logo {
-        text-align: center;
-        font-size: 1.1rem;
-        display: none;
+        font-size: 0.9rem;
+        display: block;
     }
 
     .file-upload-section {
-        width: 100%;
-        justify-content: space-between;
-        gap: 3px;
-    }
-
-    #sidebar-toggle-header {
-        flex: 1;
-        justify-content: center;
-        min-width: auto;
+        gap: 2px;
     }
 
     .upload-label {
-        flex: 1;
-        justify-content: center;
-        min-width: 110px; /* 稍小的最小宽度 */
-        padding: 4px 6px; /* 超小屏幕更紧凑 */
+        width: 30px;
+        height: 30px;
+        padding: 5px;
+        font-size: 10px;
+    }
+
+    #sidebar-toggle-header {
+        width: 30px;
+        height: 30px;
+        padding: 5px;
         font-size: 10px;
     }
 
